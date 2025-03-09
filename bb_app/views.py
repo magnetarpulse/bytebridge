@@ -184,7 +184,7 @@ class SendAllDatastoresAPI(APIView):
             return JsonResponse({'error': 'Invalid JSON format'}, status=400)
 
 
-def get_buckets_for_user(owner_id, selected_datastore):
+def get_all_ds(owner_id, selected_datastore):
     
     """ Retrieve all buckets for a user in a selected datastore. """
     buckets_upload = list(
@@ -222,7 +222,7 @@ class SendBuckets(APIView):
             selected_datastore.save()
 
             # Retrieve buckets using the reusable function
-            buckets_upload = get_buckets_for_user(owner_id, selected_datastore) # pass the selected_datastore instance
+            buckets_upload = get_all_ds(owner_id, selected_datastore) # pass the selected_datastore instance
 
             if buckets_upload:
                 return JsonResponse({'message': 'Buckets sent from bb', 'buckets_upload': buckets_upload}, status=200)
@@ -267,7 +267,7 @@ class CreateBuckets(APIView):
                 print('Directory created successfully')
 
                 # Retrieve updated list of buckets
-                buckets_upload = get_buckets_for_user(owner_id, selected_datastore)
+                buckets_upload = get_all_ds(owner_id, selected_datastore)
 
                 return JsonResponse({'message': 'Bucket created successfully', 'buckets_upload': buckets_upload, 'created_bucket': bucket_obj.bucket_id}, status=200)
 
@@ -346,3 +346,75 @@ def upload_file(static_path, file, file_id, datastore_id, bucket_id):
             destination.write(chunk)
     
     
+
+class SendUserBucketAPI(APIView):
+    def post(self, request):
+        try:
+            data = json.loads(request.body.decode("utf-8"))
+            owner_id = data.get('owner_id')
+
+            print(f"Owner ID sent by NC: {owner_id}")
+
+            if not owner_id:
+                return JsonResponse({'error': 'Missing owner_id'}, status=400)
+
+            all_buckets = list(Buckets.objects.filter(owner_id=owner_id).values_list('bucket_name', 'bucket_id'))
+
+            for bucket in all_buckets:
+                bucket_obj = Buckets.objects.get(bucket_name=bucket[0], bucket_id = bucket[1], owner_id=owner_id)
+                bucket_obj.accessed_at = timezone.now()
+                bucket_obj.save()
+
+            print(f"All datastores owned by {owner_id}: {all_buckets}")
+
+            return JsonResponse({'message': 'Owner ID received by BB', 'all_buckets': all_buckets}, status=200)
+
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON format'}, status=400)
+    
+
+class Change_Bucket_Settings(APIView):
+    def post(self, request):
+        try:
+            data = json.loads(request.body.decode("utf-8"))
+            owner_id = data.get('owner_id')
+            selected_bucket = data.get('selected_bucket')
+            private_permissions = data.get('private_permissions')
+            bucket_name = data.get('bucket_name')
+
+            if not selected_bucket or private_permissions is None:  # Ensure required fields are present
+                return JsonResponse({'error': 'Missing required parameters'}, status=400)
+
+            try:
+                selected_bucket = Buckets.objects.get(bucket_id=selected_bucket, owner_id=owner_id)
+            except Datastores.DoesNotExist:
+                return JsonResponse({'error': 'Bucket not found'}, status=404)
+
+            selected_bucket.accessed_at = timezone.now()
+            updates_made = False  # Initialize updates flag
+
+            # Check and update private permissions
+            new_value = private_permissions == 'private'
+            if new_value != selected_bucket.private_permissions:
+                selected_bucket.private_permissions = new_value
+                updates_made = True
+                print(f"Bucket privacy updated to {private_permissions} for user {owner_id}")
+
+            # Check and update datastore name
+            if bucket_name and bucket_name != selected_bucket.bucket_name:
+                selected_bucket.bucket_name = bucket_name
+                updates_made = True
+                print(f"Bucket name updated to {bucket_name} for user {owner_id}")
+
+            # Save changes only if updates were made
+            if updates_made:
+                selected_bucket.save()
+                return JsonResponse({'message': 'Bucket settings updated successfully'}, status=200)
+            else:
+                return JsonResponse({'message': 'No changes were made'}, status=200)
+
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON format'}, status=400)
+
+        except Exception as e:
+            return JsonResponse({'error': f'Error: {str(e)}'}, status=500)
