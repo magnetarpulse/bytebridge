@@ -425,8 +425,8 @@ class Change_Bucket_Settings(APIView):
             return JsonResponse({'error': 'Invalid JSON format'}, status=400)
 
         except Exception as e:
-<<<<<<< HEAD
+
             return JsonResponse({'error': f'Error: {str(e)}'}, status=500)
-=======
+
             return JsonResponse({'error': f'Error: {str(e)}'}, status=500)
->>>>>>> ac40a93 (Updated with bucket creation api)
+
