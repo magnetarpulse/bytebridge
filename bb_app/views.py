@@ -242,6 +242,12 @@ class CreateBuckets(APIView):
             selected_ds = data.get('selected_ds')
             bucket_name = data.get('bucket_name')
             static_path = data.get('static_path')
+            private_permissions= data.get('private_permissions',None)
+            default = data.get('default', False)
+
+            if private_permissions is None:
+                private_permissions = False
+            
 
             print(f"Selected Datastore: {selected_ds}")
             print(f"Bucket Name: {bucket_name}")
@@ -255,6 +261,8 @@ class CreateBuckets(APIView):
                 datastore_id=selected_datastore,
                 owner_id=owner_id,
                 bucket_name=bucket_name,
+                private_permissions=private_permissions,
+                default=default,
                 bucket_id=uuid.uuid4(),
                 accessed_at=timezone.now(),
             )
@@ -417,4 +425,8 @@ class Change_Bucket_Settings(APIView):
             return JsonResponse({'error': 'Invalid JSON format'}, status=400)
 
         except Exception as e:
+<<<<<<< HEAD
             return JsonResponse({'error': f'Error: {str(e)}'}, status=500)
+=======
+            return JsonResponse({'error': f'Error: {str(e)}'}, status=500)
+>>>>>>> ac40a93 (Updated with bucket creation api)
