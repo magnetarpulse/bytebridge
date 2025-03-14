@@ -1,6 +1,6 @@
 from django.apps import AppConfig
 
 
-class BbAppConfig(AppConfig):
+class DataServiceConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'bb_app'
+    name = 'data_service'

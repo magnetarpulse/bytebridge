@@ -18,7 +18,7 @@ class Datastores(models.Model):
     accessed_at = models.DateTimeField(null=False, blank=False)
 
     def __str__(self):
-        return f"Datastore for {self.instance_id}: {self.datastore_id}"
+        return f"Datastore {self.instance_id}: {self.datastore_id}"
 
 
 class Buckets(models.Model):
@@ -36,7 +36,7 @@ class Buckets(models.Model):
     accessed_at = models.DateTimeField(null=False, blank=False)
     
     def __str__(self):
-        return f"Bucket for {self.instance_id}: {self.bucket_id}"
+        return f"Bucket {self.bucket_id}: {self.bucket_name}"
 
 
 class Objects(models.Model):
@@ -57,4 +57,4 @@ class Objects(models.Model):
     accessed_at = models.DateTimeField(null=False, blank=False)
 
     def __str__(self):
-        return f"{self.datastore_id} contains {self.file.name}"
+        return f"{self.datastore_id} {self.bucket_id} contains {self.file.id}: {self.file_name}"

@@ -39,8 +39,17 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'bb_app',
+    'data_service',
 ]
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+       'data_service.authentication.CentralAuthServiceAuthentication',  # ✅ Use Cookie-based authentication
+    ),
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -120,6 +129,10 @@ USE_TZ = True
 
 
 STATIC_URL = '/static/'  # Required for serving static files
+
+DATASTORE_URL = '/datastore/'
+
+DATASTORE_ROOT = os.path.join(BASE_DIR, 'datastore')
 
 
 # Default primary key field type
