@@ -359,7 +359,21 @@ class CreateBuckets(APIView):
             selected_datastore.accessed_at = timezone.now()
             selected_datastore.save()
 
-            # Create the bucket
+            # Retrieve updated list of buckets
+            buckets_upload = get_all_ds(owner_id, selected_datastore)
+
+
+            if default:
+                existing_def_bucket = Buckets.objects.filter(datastore_id=selected_datastore, default=True, owner_id=owner_id).first()
+
+                if existing_def_bucket:
+                    print(f"Existing Default Bucket: {existing_def_bucket}") 
+                  
+                    return JsonResponse({'message': 'Default Bucket for owner already exists', 'buckets_upload': buckets_upload, 'created_bucket': existing_def_bucket.bucket_id}, status=200)
+
+                    
+            # Create a new non-default/default bucket
+
             bucket_obj = Buckets.objects.create(
                 datastore_id=selected_datastore,
                 owner_id=owner_id,
@@ -377,8 +391,6 @@ class CreateBuckets(APIView):
                 #os.makedirs(f"{static_path}/{selected_ds}/{bucket_obj.bucket_id}", exist_ok=True)
                 print('Directory created successfully')
 
-                # Retrieve updated list of buckets
-                buckets_upload = get_all_ds(owner_id, selected_datastore)
 
                 return JsonResponse({'message': 'Bucket created successfully', 'buckets_upload': buckets_upload, 'created_bucket': bucket_obj.bucket_id}, status=200)
 
