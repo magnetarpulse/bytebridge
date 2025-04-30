@@ -2,6 +2,7 @@ import os
 import requests
 import json
 import uuid
+import mimetypes
 import urllib.parse
 from django.http import JsonResponse
 from django.http import HttpResponse
@@ -18,6 +19,7 @@ from .serializers import *
 from django.conf import settings
 from django.core.files.storage import FileSystemStorage
 from django.core.files import File
+from django.db.models import Q
 
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -61,13 +63,13 @@ class CreateDatastoreAPI(APIView):
             static_path = data['static_path']
             print(f"In BB CHeck: Owner ID: {owner_id}, Instance ID: {instance_id}, Static Path: {static_path}")
 
-            bb_datastore = Datastores.objects.filter(instance_id=instance_id, default=True)
+            bb_datastore = Datastores.objects.filter(bytebridge_id=instance_id, default=True)
 
             # If no datastore exists with the given instance_id and default=True, create a new one
             if not bb_datastore:
-                bb_datastore = Datastores.objects.create(owner_id=owner_id,instance_id=instance_id,
+                bb_datastore = Datastores.objects.create(owner_id=owner_id,bytebridge_id=instance_id,
                     datastore_id=uuid.uuid4(), datastore_name=f"default-datastore-{owner_id}",
-                    accessed_at=timezone.now(),)
+                    accessed_at=timezone.now())
                 
                 print(f"Datastore with ID: {bb_datastore.datastore_id} accessed at {bb_datastore.accessed_at}")
 
@@ -107,14 +109,13 @@ class Change_DS_Settings(APIView):
 
             selected_datastore.accessed_at = timezone.now()
             updates_made = False  # Initialize updates flag
-
+            
             # Check and update private permissions
-            new_value = private_permissions == 'private'
-            if new_value != selected_datastore.private_permissions:
-                selected_datastore.private_permissions = new_value
+            if private_permissions != selected_datastore.private_permissions:
+                selected_datastore.private_permissions = private_permissions
                 updates_made = True
-                print(f"Datastore privacy updated to {private_permissions} for user {owner_id}")
-
+                print(f"Datastore privacy updated to '{private_permissions}' for user {owner_id}")
+            
             # Check and update datastore name
             if datastore_name and datastore_name != selected_datastore.datastore_name:
                 selected_datastore.datastore_name = datastore_name
@@ -160,11 +161,11 @@ class Change_Bucket_Settings(APIView):
             updates_made = False  # Initialize updates flag
 
             # Check and update private permissions
-            new_value = private_permissions == 'private'
-            if new_value != selected_bucket.private_permissions:
-                selected_bucket.private_permissions = new_value
+            if private_permissions != selected_bucket.private_permissions:
+                selected_bucket.private_permissions = private_permissions
                 updates_made = True
-                print(f"Bucket privacy updated to {private_permissions} for user {owner_id}")
+                print(f"Bucket privacy updated to '{private_permissions}' for user {owner_id}")
+            
 
             # Check and update datastore name
             if bucket_name and bucket_name != selected_bucket.bucket_name:
@@ -187,30 +188,48 @@ class Change_Bucket_Settings(APIView):
             return JsonResponse({'error': f'Error: {str(e)}'}, status=500)
 
 
-# api to send all datastores owned by the user to NC
-@authentication_classes([CentralAuthServiceAuthentication])  #  Use new authentication
+
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from django.http import JsonResponse
+from django.utils import timezone
+from rest_framework.decorators import authentication_classes, permission_classes
+import json
+
+
+@authentication_classes([CentralAuthServiceAuthentication])  
 @permission_classes([IsAuthenticated])
-class SendUserDatastoresAPI(APIView):
+class SendDatastoresAPI(APIView):
     def post(self, request):
         try:
             data = json.loads(request.body.decode("utf-8"))
             owner_id = data.get('owner_id')
-
-            print(f"Owner ID sent by NC: {owner_id}")
+            include_public = data.get('include_public', False)
 
             if not owner_id:
                 return JsonResponse({'error': 'Missing owner_id'}, status=400)
 
-            all_datastores = list(Datastores.objects.filter(owner_id=owner_id).values_list('datastore_name', 'datastore_id'))
+            datastores_upload = []
 
-            for datastore in all_datastores:
-                datastore_obj = Datastores.objects.get(datastore_name=datastore[0], datastore_id = datastore[1], owner_id=owner_id)
-                datastore_obj.accessed_at = timezone.now()
-                datastore_obj.save()
+            # Always include user's own datastores
+            user_specific_ds = Datastores.objects.filter(owner_id=owner_id).values_list('datastore_name', 'datastore_id')
+            datastores_upload.extend(user_specific_ds)
 
-            print(f"All datastores owned by {owner_id}: {all_datastores}")
+            # If include_public = True, add public datastores as well
+            if include_public:
+                public_ds_all = Datastores.objects.filter(private_permissions='community').exclude(owner_id=owner_id).values_list('datastore_name', 'datastore_id')
+                datastores_upload.extend(public_ds_all)
 
-            return JsonResponse({'message': 'Owner ID received by BB', 'all_datastores': all_datastores}, status=200)
+            # Update accessed_at for each datastore
+            datastore_ids = [datastore[1] for datastore in datastores_upload]
+            Datastores.objects.filter(datastore_id__in=datastore_ids).update(accessed_at=timezone.now())
+
+            print(f"Datastores Available for {owner_id}: {datastores_upload}")
+
+            return JsonResponse({
+                'message': 'Owner ID received by BB', 
+                'datastores_upload': datastores_upload
+            }, status=200)
 
         except json.JSONDecodeError:
             return JsonResponse({'error': 'Invalid JSON format'}, status=400)
@@ -218,35 +237,68 @@ class SendUserDatastoresAPI(APIView):
 
 
 # api to send all datastores owned by the user to NC
-@authentication_classes([CentralAuthServiceAuthentication])  #  Use new authentication
-@permission_classes([IsAuthenticated])
-class SendAllDatastoresAPI(APIView):
-    def post(self, request):
-        try:
-            data = json.loads(request.body.decode("utf-8"))
-            owner_id = data.get('owner_id')
+# @authentication_classes([CentralAuthServiceAuthentication])  #  Use new authentication
+# @permission_classes([IsAuthenticated])
+# class SendUserDatastoresAPI(APIView):
+#     def post(self, request):
+#         try:
+#             data = json.loads(request.body.decode("utf-8"))
+#             owner_id = data.get('owner_id')
+#             include_public = data.get('include_public')
 
-            self.datastores_upload = []
-            # user datastores
-            user_specific_ds = Datastores.objects.filter(owner_id=owner_id).values_list('datastore_name', 'datastore_id')
+#             print(f"Owner ID sent by NC: {owner_id}. Include Public: {include_public}")
+
+#             if not owner_id:
+#                 return JsonResponse({'error': 'Missing owner_id'}, status=400)
+
+#             all_datastores = list(Datastores.objects.filter(owner_id=owner_id).values_list('datastore_name', 'datastore_id'))
+
+#             for datastore in all_datastores:
+#                 datastore_obj = Datastores.objects.get(datastore_name=datastore[0], datastore_id = datastore[1], owner_id=owner_id)
+#                 datastore_obj.accessed_at = timezone.now()
+#                 datastore_obj.save()
+
+#             print(f"All datastores owned by {owner_id}: {all_datastores}")
+
+#             return JsonResponse({'message': 'Owner ID received by BB', 'all_datastores': all_datastores}, status=200)
+
+#         except json.JSONDecodeError:
+#             return JsonResponse({'error': 'Invalid JSON format'}, status=400)
+
+
+
+# # api to send all datastores owned by the user to NC
+# @authentication_classes([CentralAuthServiceAuthentication])  #  Use new authentication
+# @permission_classes([IsAuthenticated])
+# class SendAllDatastoresAPI(APIView):
+#     def post(self, request):
+#         try:
+#             data = json.loads(request.body.decode("utf-8"))
+#             owner_id = data.get('owner_id')
+#             include_public = data.get('include_public')
+
+#             print(f"Owner ID sent by NC: {owner_id}. Include Public: {include_public}")
+
+#             self.datastores_upload = []
+#             # user datastores
+#             user_specific_ds = Datastores.objects.filter(owner_id=owner_id).values_list('datastore_name', 'datastore_id')
+#             self.datastores_upload.extend(user_specific_ds)
+
+#             # Get all public datastores except the user's own
+#             public_ds_all = Datastores.objects.filter(private_permissions='community').exclude(owner_id=owner_id).values_list('datastore_name', 'datastore_id')
+#             self.datastores_upload.extend(public_ds_all)
+
+#             for datastore in self.datastores_upload:
+#                 datastore_obj = Datastores.objects.get(datastore_id=datastore[1])
+#                 datastore_obj.accessed_at = timezone.now()
+#                 datastore_obj.save()
+
+#             print(f"Public datastores Available for {owner_id}: {self.datastores_upload}")
             
-            self.datastores_upload.extend(user_specific_ds)
+#             return JsonResponse({'message': 'Owner ID received by BB', 'datastores_upload': self.datastores_upload}, status=200)
 
-            # Get all public datastores except the user's own
-            public_ds_all = Datastores.objects.filter(private_permissions=False).exclude(owner_id=owner_id).values_list('datastore_name', 'datastore_id')
-            self.datastores_upload.extend(public_ds_all)
-
-            for datastore in self.datastores_upload:
-                datastore_obj = Datastores.objects.get(datastore_id=datastore[1])
-                datastore_obj.accessed_at = timezone.now()
-                datastore_obj.save()
-
-            print(f"Public datastores Available for {owner_id}: {self.datastores_upload}")
-            
-            return JsonResponse({'message': 'Owner ID received by BB', 'datastores_upload': self.datastores_upload}, status=200)
-
-        except json.JSONDecodeError:
-            return JsonResponse({'error': 'Invalid JSON format'}, status=400)
+#         except json.JSONDecodeError:
+#             return JsonResponse({'error': 'Invalid JSON format'}, status=400)
 
 
 @authentication_classes([CentralAuthServiceAuthentication]) 
@@ -259,7 +311,7 @@ def get_all_ds(owner_id, selected_datastore):
     )
 
     public_buckets = list(
-        Buckets.objects.filter(datastore_id=selected_datastore, private_permissions=False)
+        Buckets.objects.filter(datastore_id=selected_datastore, private_permissions='community')
         .exclude(owner_id=owner_id)
         .values_list('bucket_name', 'bucket_id')
     )
@@ -349,7 +401,7 @@ class CreateBuckets(APIView):
             default = data.get('default', False)
 
             if private_permissions is None:
-                private_permissions = False
+                private_permissions = 'community'
             
 
             print(f"Selected Datastore: {selected_ds}")
@@ -433,7 +485,8 @@ class CreateObjects(APIView):
                 #print(f"API Endpoint: {api_endpoint}") 
 
                 # Create the object
-                object_obj = Objects.objects.create(owner_id=owner_id, datastore_id=selected_datastore, bucket_id=selected_b,
+                
+                object_obj = Objects.objects.create(owner_id=owner_id, bucket_id=selected_b,
                             file_id=file_id, file_name=file_name, file_type=file_type, file_size=file_size, 
                             file_path=f"{selected_ds}/{selected_bucket}/{file_name}",
                             accessed_at=timezone.now())
@@ -492,7 +545,8 @@ class List_Datasets(APIView):
 
             if owner_id and dataset_type:
                 if dataset_type=='private':
-                    private_buckets = Buckets.objects.filter(owner_id=owner_id, private_permissions=True)
+                    #private_buckets = Buckets.objects.filter(owner_id=owner_id, private_permissions='private')
+                    private_buckets = Buckets.objects.filter(private_permissions='private', owner_id=owner_id)
                     buckets_for_datasets.extend(private_buckets)
                     private_buckets.accessed_at = timezone.now()
                     
@@ -500,16 +554,20 @@ class List_Datasets(APIView):
                     print(f"Private Buckets: {buckets_for_datasets}")
 
                     for bucket in buckets_for_datasets:
-                        object_obj = Objects.objects.filter(owner_id=owner_id, bucket_id = bucket).values_list('file_id', 'file_name', 'file_path', 'uploaded_at', 'file_size', 'owner_id')
+                        #object_obj = Objects.objects.filter(owner_id=owner_id, bucket_id = bucket).values_list('file_id', 'file_name', 'file_path', 'uploaded_at', 'file_size', 'owner_id')
+                        
+                        object_obj = Objects.objects.filter(bucket_id = bucket).values_list('file_id', 'file_name', 'file_path', 'uploaded_at', 'file_size', 'owner_id')
+                        bucket_object = Buckets.objects.get(bucket_id=bucket.bucket_id)
+                        bucket_object.accessed_at = timezone.now()
+                        bucket_object.save()
                         datasets.extend(object_obj)
                         object_obj.accessed_at = timezone.now()
                         
-
                         print(f"Private Datasets: {datasets}")
                 
 
                 elif dataset_type=='public':
-                    public_buckets = Buckets.objects.filter(private_permissions=False)
+                    public_buckets = Buckets.objects.filter(~Q(private_permissions='private')) # exclude private buckets
                     buckets_for_datasets.extend(public_buckets)
                     
                     for bucket in buckets_for_datasets:
@@ -557,17 +615,18 @@ class ViewFile(APIView):
             print(f"Full Path: {full_path}")
 
             if os.path.exists(full_path):
-                
-                # Ensure file_path is properly encoded (without double encoding)
-                if '%' in file_path:  # If already encoded, don't re-encode
+                if '%' in file_path:
                     encoded_file_path = file_path
                 else:
-                    encoded_file_path = urllib.parse.quote(file_path, safe="/")  # Only encode spaces
+                    encoded_file_path = urllib.parse.quote(file_path, safe="/")
 
-                # Construct the absolute URL
                 file_url = f"{request.build_absolute_uri(settings.DATASTORE_URL)}{encoded_file_path}"
+                content_type = mimetypes.guess_type(full_path)[0] or 'application/octet-stream'
+
                 print(f"File URL: {file_url}")
-                return Response({'file_path': file_url}, status=200)
+                print(f"Content-Type: {content_type}")
+
+                return Response({'file_path': file_url, 'content_type': content_type}, status=200)
             
             else:
                 # Return a proper response if file is not found
