@@ -12,14 +12,20 @@ Scalable Data Management Service for the Neurobazaar Platform.
 
 ## Requirements and Setup
 
+```
+sudo apt update
+sudo apt upgrade
+sudo apt install python3.11 python3.11-venv libpython3.11-dev build-essential
+```
 This software has been developed and tested using Python 3.13 on Ubuntu 24.04 LTS Server Edition.
 
 In terms of enviroment setup, you will need to create a new Python 3.13 Virtual Enviroment and then install the Django dependencies.
 Here is a list of commands that you can use on a machine using Ubuntu to set up the enviroment and install the dependencies:
 ```
-python3.13 -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
+
 ```
 
 ## Running the Program
@@ -32,5 +38,5 @@ python manage.py migrate
 
 To start the ByteBridge program run:
 ```
-python manage.py runserver 9000
+python manage.py runserver 8000
 ```
