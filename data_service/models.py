@@ -54,8 +54,6 @@ class Objects(models.Model):
     """ Model to store a persistent file upload path with datastore id and user id for each user with privacy settings """
     
     file_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    owner_id = models.IntegerField(blank=False, null=False)
-    #datastore_id = models.ForeignKey(Datastores, on_delete=models.CASCADE, db_column="datastore_id") # ForeignKey to the UserDatastore model
     bucket_id = models.ForeignKey(Buckets, on_delete=models.CASCADE, db_column="bucket_id") # ForeignKey to the UserBucket model
 
     file_name = models.CharField(max_length=100, blank=False)
