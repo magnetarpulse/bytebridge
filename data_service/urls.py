@@ -12,7 +12,7 @@ if settings.DEBUG:
         path('api/check_user_datastore', CheckDatastoreAPI.as_view(), name='check_datastore_api'),  # Check datastore API
         
         path('api/change_ds_settings', Change_DS_Settings.as_view(), name='change_ds_settings'),  # Change settings API
-        path('api/change_bucket_settings', Change_Bucket_Settings.as_view(), name='change_bucket_settings'),  # Change settings API
+        #path('api/change_bucket_settings', Change_Bucket_Settings.as_view(), name='change_bucket_settings'),  # Change settings API
 
         # Get all datastores: api/(all_datastores)
         path('api/datastores', ListDatastoresAPI.as_view(), name='list_datastore'), 

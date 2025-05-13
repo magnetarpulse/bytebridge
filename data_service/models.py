@@ -41,7 +41,7 @@ class Buckets(models.Model):
     bucket_name = models.CharField(max_length=100, blank=False)
     private_permissions = models.CharField(max_length=10, choices=Permission_Choices.choices, default=Permission_Choices.PRIVATE)
     
-    default = models.BooleanField(default=True)
+    #default = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     modified_at = models.DateTimeField(auto_now=True)
     accessed_at = models.DateTimeField(null=False, blank=False)
