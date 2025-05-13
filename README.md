@@ -38,5 +38,5 @@ python manage.py migrate
 
 To start the ByteBridge program run:
 ```
-python manage.py runserver 8000
+python manage.py runserver 9000
 ```
