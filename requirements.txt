@@ -1,4 +1,4 @@
 django
 djangorestframework
-pymongo
-djongo
+requests
+rest_framework_simplejwt
