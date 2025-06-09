@@ -25,8 +25,8 @@ SECRET_KEY = 'django-insecure-xicpl$$mdn=f6fz_m60uyhsloc6@o@b1**i*kp^ovwvahbde%=
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
-
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '192.168.1.106']
+# ALLOWED_HOSTS = ['*']  # For development only, not recommended for production
 
 # Application definition
 
@@ -37,7 +37,19 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'bb_app',
 ]
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+       'bb_app.authentication.CentralAuthServiceAuthentication',  # ✅ Use Cookie-based authentication
+    ),
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+}
+
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
