@@ -10,8 +10,8 @@ def main():
     neuro_ip = input("Enter Neurocontroller IP (e.g., 127.0.0.1): ").strip()
     neuro_port = input("Enter Neurocontroller Port (e.g., 8000): ").strip()
     token = input("Paste your access token (JWT from Neurocontroller): ").strip()
-    exposed_path = input("Enter full folder path to expose (e.g., C:/Users/Rushikesh/Desktop/images): ").strip()
-    ip_address = input("Enter your machine's IP address (e.g., 192.168.1.106): ").strip()
+    exposed_path = input("Enter full folder path to expose (e.g., C:/xyz/abc/images): ").strip()
+    ip_address = input("Enter your machine's IP address (e.g., 192.168.1.xxx): ").strip()
     port = input("Enter ByteBridge port (e.g., 8001): ").strip()
 
     # Get user_id from token payload (optional, or send token only)
