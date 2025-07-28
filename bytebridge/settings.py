@@ -63,9 +63,7 @@ DEBUG = env('DEBUG')
 ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
-    '[::1]',
-    '129.114.108.18',
-    '129.114.108.18.sslip.io',
+    '[::1]'
 ]
 
 # Application definition
