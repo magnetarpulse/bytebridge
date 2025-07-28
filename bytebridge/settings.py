@@ -11,50 +11,131 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 from pathlib import Path
+import os
+import sys
+from datetime import timedelta
+import socket
+import environ
+from django.core.management.utils import get_random_secret_key
+from django.core.exceptions import ImproperlyConfigured
+from django.conf import LazySettings
+
+def generate_secret_key():
+    """
+    Generate a new secret key for Django settings.
+    
+    This function is used to create a new secret key if one is not provided
+    in the environment variables or if the provided key is invalid.
+    """
+    return get_random_secret_key()
+
+env = environ.Env(
+    # Set default values
+    DEBUG=(bool, False),
+    SECRET_KEY=(str, None),
+    API_HOST=(str, "localhost"),
+    API_PORT=(str, "8000"),
+    API_PROTOCOL=(str, "http"),
+)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Built frontend (React) build directory
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'static'),  
+]
+
+# Temporary upload directory
+UPLOAD_TEMP_DIR = BASE_DIR / 'uploads_temp'
+
+environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-xicpl$$mdn=f6fz_m60uyhsloc6@o@b1**i*kp^ovwvahbde%='
+# Generate a secret key if none is provided
+SECRET_KEY = env('SECRET_KEY') if env('SECRET_KEY') else generate_secret_key()
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env('DEBUG')
 
-ALLOWED_HOSTS = []
-
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    '[::1]',
+    '129.114.108.18',
+    '129.114.108.18.sslip.io',
+]
 
 # Application definition
 
 INSTALLED_APPS = [
+    # Core application
+    'core.apps.CoreConfig',
+    
+    # Django apps
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'django.contrib.staticfiles',
+    'django.contrib.staticfiles',  
+    
+    # Third-party apps
+    'rest_framework',
+    'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
+    'corsheaders',
+    'drf_yasg',
+    'django_filters',
+    
+    # Other applications
+    'api.apps.ApiConfig',
+    'integrations.apps.IntegrationsConfig',
+    'users.apps.UsersConfig',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'core.middleware.JavaScriptMimeTypeMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  
+    'core.middleware.PermissionVerificationMiddleware',
 ]
+
+CORS_ALLOW_ALL_ORIGINS = True
+
+# For development only!
+'''
+if DEBUG:
+    FRONTEND_URL = 'http://localhost:5173' # Vite dev server
+    CORS_ALLOW_CREDENTIALS = True
+    CORS_ALLOWED_ORIGINS = [
+        "http://localhost:5173",           # Vite dev server
+        "http://localhost:5174",           # Vite dev server
+    ]
+    CSRF_TRUSTED_ORIGINS = [
+        "http://localhost:5173",           # Vite dev server
+        "http://localhost:5174",           # Vite dev server
+    ]
+    CSRF_COOKIE_SAMESITE = 'Lax'
+    CSRF_COOKIE_HTTPONLY = False           # Allows JavaScript to read the cookie
+'''
 
 ROOT_URLCONF = 'bytebridge.urls'
 
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [
+            os.path.join(BASE_DIR, 'templates'),
+        ],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -67,8 +148,10 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'bytebridge.wsgi.application'
+LOGIN_REDIRECT_URL = 'integrations:dashboard'
+LOGOUT_REDIRECT_URL = 'login'
 
+WSGI_APPLICATION = 'bytebridge.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
@@ -80,6 +163,8 @@ DATABASES = {
     }
 }
 
+DATABASE_TYPE = env('DATABASE_TYPE', default='SQLite')
+USE_QUEUE_EXTRACTION = DATABASE_TYPE.lower() == 'sqlite'
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -115,9 +200,202 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# Media files (Uploads)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Rest Framework settings
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 100,
+    'DEFAULT_FILTER_BACKENDS': [
+        'django_filters.rest_framework.DjangoFilterBackend',
+        'rest_framework.filters.SearchFilter',
+        'rest_framework.filters.OrderingFilter',
+    ],
+}
+
+# JWT settings
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=5),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': False,
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'VERIFYING_KEY': None,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+    'TOKEN_TYPE_CLAIM': 'token_type',
+    'VERIFY_EXPIRATION': True,  
+}
+
+# Host configuration
+HOSTNAME = socket.gethostname()
+# Default to current hostname or localhost, but allow override
+API_HOST = env('API_HOST', default=socket.gethostbyname(HOSTNAME) if not DEBUG else 'localhost')
+# Default port, should be overridden in process
+API_PORT = env('API_PORT')  
+
+# Protocol detection - use https if port is 443
+API_PROTOCOL = env('API_PROTOCOL', default='https' if API_PORT == '443' else 'http')
+
+# Full API endpoint construction
+API_BASE_URL = f"{API_PROTOCOL}://{API_HOST}"
+if API_PORT not in ('80', '443'):
+    API_BASE_URL += f":{API_PORT}"
+
+def update_api_port(port):
+    """
+    Updates the API_PORT setting at runtime when the Django server starts.
+    This ensures we use the actual port the server is running on.
+    
+    Should be called from runserver command when port is known.
+    """
+    global API_PORT, API_BASE_URL
+    API_PORT = str(port)
+    
+    # Reconstruct API_BASE_URL with the new port
+    API_BASE_URL = f"{API_PROTOCOL}://{API_HOST}"
+    if API_PORT not in ('80', '443'):
+        API_BASE_URL += f":{API_PORT}"
+    
+    return API_BASE_URL
+
+setattr(LazySettings, 'update_api_port', update_api_port)
+
+# NEUROCONTROLLER_URL must be provided in .env or environment
+try:
+    NEUROCONTROLLER_URL = env('NEUROCONTROLLER_URL')
+except environ.ImproperlyConfigured:
+    if DEBUG:
+        import warnings
+        warnings.warn(
+            "NEUROCONTROLLER_URL is not set. This will not work."
+        )
+        # Raise an error in development to ensure the developer is aware
+        # of the missing configuration.
+        raise
+    else:
+        # In production, raise the error without a warning
+        # to avoid exposing sensitive information.
+        raise
+
+NEUROCONTROLLER_TOKEN_ID = env('NEUROCONTROLLER_TOKEN_ID', default='')
+if not NEUROCONTROLLER_TOKEN_ID:
+    if DEBUG:
+        import warnings
+        warnings.warn(
+            "NEUROCONTROLLER_TOKEN_ID is not set. NeuroController integration will not work."
+        )
+    else:
+        # In production, raise an error if token ID is missing
+        raise ImproperlyConfigured("NEUROCONTROLLER_TOKEN_ID must be provided for NeuroController integration.")
+
+# Logging configuration
+# In production (DEBUG=False), logging is required and cannot be disabled
+if not DEBUG and not env.bool('LOGGING_ENABLED', default=True):
+    raise ImproperlyConfigured(
+        "ERROR: Logging cannot be disabled in production environments. "
+        "Remove LOGGING_ENABLED=False from your environment settings."
+    )
+
+# For development and testing, logging is optional
+TESTING = 'test' in sys.argv
+LOGGING_ENABLED = True  # Default to enabled
+
+# In development, allow disabling logging
+if DEBUG:
+    LOGGING_ENABLED = env.bool('LOGGING_ENABLED', default=False)
+
+# Skip logging during tests unless explicitly enabled
+# To enable logging during test runs, set LOG_DURING_TESTS=True and LOGGING_ENABLED=True
+# in your environment variables.
+if TESTING and not env.bool('LOG_DURING_TESTS', default=False):
+    LOGGING_ENABLED = False
+
+if LOGGING_ENABLED:
+    LOGGING = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'formatters': {
+            'verbose': {
+                'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+                'style': '{',
+            },
+            'simple': {
+                'format': '{levelname} {message}',
+                'style': '{',
+            },
+        },
+        'handlers': {
+            'console': {
+                'class': 'logging.StreamHandler',
+                'formatter': 'verbose' if not DEBUG else 'simple',
+            },
+            'file': {
+                'class': 'logging.FileHandler',
+                'filename': os.path.join(BASE_DIR, 'logs/bytebridge.log'),
+                'formatter': 'verbose',
+            },
+        },
+        'loggers': {
+            'django': {
+                'handlers': ['console', 'file'],
+                'level': 'INFO',
+                'propagate': True,
+            },
+            'django.server': {
+                'handlers': ['console'],
+                'level': 'INFO',
+                'propagate': False,
+            },
+            'integrations': {
+                'handlers': ['console', 'file'],
+                'level': 'DEBUG',
+                'propagate': False,
+            },
+        },
+    }
+else:
+    # Minimal logging configuration when disabled (only in development/testing)
+    LOGGING = {
+        'version': 1,
+        'disable_existing_loggers': True,
+        'handlers': {
+            'null': {
+                'class': 'logging.NullHandler',
+            },
+        },
+        'loggers': {
+            'django': {
+                'handlers': ['null'],
+                'propagate': False,
+            },
+            'django.security.DisallowedHost': {
+                'handlers': ['null'],
+                'propagate': False,
+            },
+        },
+    }
+
+# Ensure logs directory exists
+if LOGGING_ENABLED:
+    os.makedirs(os.path.join(BASE_DIR, 'logs'), exist_ok=True)
