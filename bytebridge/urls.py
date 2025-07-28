@@ -86,55 +86,6 @@ urlpatterns = [
             TemplateView.as_view(template_name='index.html')),
 ]
 
-# Add a dedicated debug view to check static file serving
-def debug_view(request):
-    from django.http import HttpResponse
-    import json
-    
-    # Check if worker files exist on disk
-    worker_paths = [
-        'frontend/assets/encryption.streaming.worker-7CTcz6CP.js',
-        'frontend/assets/encryption.worker-BpUaASJc.js'
-    ]
-    
-    info = {
-        'STATIC_ROOT': settings.STATIC_ROOT,
-        'STATIC_URL': settings.STATIC_URL,
-        'BASE_DIR': str(settings.BASE_DIR),
-        'workers': {}
-    }
-    
-    for path in worker_paths:
-        full_path = os.path.join(settings.BASE_DIR, 'static', path)
-        info['workers'][path] = {
-            'exists': os.path.exists(full_path),
-            'size': os.path.getsize(full_path) if os.path.exists(full_path) else 0,
-            'full_path': full_path
-        }
-    
-    return HttpResponse(f"<pre>{json.dumps(info, indent=2)}</pre>")
-
-def serve_worker_directly(request, filename):
-    """Serve worker files with the correct content type."""
-    import os
-    from django.http import HttpResponse, FileResponse
-    
-    worker_path = os.path.join(settings.BASE_DIR, 'static', 'frontend', 'assets', filename)
-    
-    if os.path.exists(worker_path):
-        with open(worker_path, 'rb') as f:
-            response = HttpResponse(f.read(), content_type='application/javascript')
-        return response
-    else:
-        return HttpResponse(f"Worker file not found: {worker_path}", status=404)
-
-# Add the debug view to urlpatterns
-urlpatterns.append(path('debug/', debug_view))
-
 # Simple approach to serve static files
 urlpatterns += static(settings.STATIC_URL, document_root=os.path.join(settings.BASE_DIR, 'static'))
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-urlpatterns += [
-    path('workers/encryption.worker-BpUaASJc.js', serve_worker_directly, {'filename': 'encryption.worker-BpUaASJc.js'}),
-    path('workers/encryption.streaming.worker-7CTcz6CP.js', serve_worker_directly, {'filename': 'encryption.streaming.worker-7CTcz6CP.js'}),
-]
