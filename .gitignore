@@ -230,3 +230,7 @@ tsconfig.tsbuildinfo
 hold/
 static/
 playground/
+.key
+templates/
+users/migrations/
+assets
