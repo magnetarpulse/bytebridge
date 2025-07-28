@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>ParallelEncryptionManager Tests</title>
+  <script type="module">
+    // Import the actual implementation modules dynamically
+    try {
+      const encryptionModule = await import('/src/lib/encryption.ts');
+      const parallelEncryptionManagerModule = await import('/src/lib/parallel.encryption.manager.ts');
+      
+      // Expose them to the global scope for testing
+      window.Encryption = encryptionModule.Encryption;
+      window.ParallelEncryptionManager = parallelEncryptionManagerModule.ParallelEncryptionManager;
+      
+      // Signal that the setup is complete
+      window.testSetupComplete = true;
+      console.log("Test setup complete, modules loaded successfully");
+    } catch (error) {
+      console.error("Error loading modules:", error);
+      document.getElementById('error').textContent = error.toString();
+    }
+  </script>
+</head>
+<body>
+  <h1>Test Environment</h1>
+  <div id="error" style="color: red;"></div>
+  <div id="status">Loading modules...</div>
+</body>
+</html>
