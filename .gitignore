@@ -15,6 +15,10 @@ downloads/
 eggs/
 .eggs/
 lib/
+
+# Include the lib directory in frontend/src
+!/frontend/src/lib/
+
 lib64/
 parts/
 sdist/
@@ -60,6 +64,9 @@ cover/
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
+logs/
+media/
+staticfiles/
 
 # Flask stuff:
 instance/
@@ -169,3 +176,57 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Rust:
+Cargo.lock
+target/
+
+# Ignore all markdown files
+*.md
+md/
+# Except for README.md
+!README.md
+
+# Visual Studio Code and Extensions
+.vscode/
+.history/
+
+# certs
+certs/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+uploads_temp/
+received_files/
+assets/
+test_results/
+test-results/
+playwright-report/
+package-lock.json
+tsconfig.tsbuildinfo
+hold/
+static/
+playground/
