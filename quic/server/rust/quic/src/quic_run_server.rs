@@ -1,0 +1,113 @@
+use anyhow::{Context, Result};
+use h3_quinn::quinn::{self, crypto::rustls::QuicServerConfig, VarInt};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use structopt::StructOpt;
+use tokio::fs;
+use tracing::{error, info};
+
+use crate::quic_protocol::handle_connection;
+
+#[derive(StructOpt, Debug)]
+#[structopt(name = "server")]
+struct Opt {
+    #[structopt(short, long, help = "What address:port to listen for new connections")]
+    pub listen: SocketAddr,
+    #[structopt(flatten)]
+    pub certs: Certs,
+    #[structopt(long, default_value = "./received_files", help = "Files directory")]
+    pub files_dir: PathBuf,
+}
+
+#[derive(StructOpt, Debug)]
+pub struct Certs {
+    #[structopt(long, short, help = "Certificate for TLS (PEM format).")]
+    pub cert: PathBuf,
+    #[structopt(long, short, help = "Private key for the certificate (PEM format).")]
+    pub key: PathBuf,
+}
+
+const ALPN_H3: &[&[u8]] = &[
+    b"h3", b"h3-32", b"h3-31", b"h3-30", b"h3-29",
+];
+
+pub async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
+    // Install the default crypto provider before any TLS operations
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .map_err(|_| "Failed to install default crypto provider")?;
+
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
+
+    let opt = Opt::from_args();
+    fs::create_dir_all(&opt.files_dir).await?;
+    let files_dir = Arc::new(opt.files_dir);
+    let Certs { cert, key } = opt.certs;
+
+    let certs: Vec<CertificateDer> = rustls_pemfile::certs(&mut std::io::BufReader::new(
+        std::fs::File::open(cert).context("Failed to open cert file")?,
+    ))
+    .collect::<Result<_, _>>()?;
+
+    let key: PrivateKeyDer = rustls_pemfile::private_key(&mut std::io::BufReader::new(
+        std::fs::File::open(key).context("Failed to open key file")?,
+    ))?
+    .context("Failed to find private key in file")?;
+
+    let mut tls_config = rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(certs, key)?;
+    tls_config.alpn_protocols = ALPN_H3.iter().map(|&x| x.into()).collect();
+    
+    // Create a transport configuration with optimized keepalive settings
+    let mut transport_config = quinn::TransportConfig::default();
+    
+    // Enable keepalive to prevent connection drops during idle periods (critical for WebTransport)
+    transport_config.keep_alive_interval(Some(std::time::Duration::from_secs(10)));
+    
+    // Increase idle timeout to be more tolerant of network fluctuations
+    transport_config.max_idle_timeout(Some(std::time::Duration::from_secs(120).try_into().unwrap()));
+    
+    // Set flow control limits appropriate for large file transfers
+    // Note: quinn's TransportConfig API might differ from what was initially attempted
+    // We're using methods available in the current quinn version
+    transport_config.receive_window(VarInt::from_u32(10_000_000).into());    // ~10MB receive window
+    transport_config.send_window(VarInt::from_u32(10_000_000).into());       // ~10MB send window
+    
+    // Create server config with the transport settings
+    let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(QuicServerConfig::try_from(tls_config)?));
+    server_config.transport = Arc::new(transport_config);
+    
+    let endpoint = quinn::Endpoint::server(server_config, opt.listen)?;
+    info!("listening on {}", opt.listen);
+
+    while let Some(new_conn) = endpoint.accept().await {
+        let files_dir = files_dir.clone();
+        tokio::spawn(async move {
+            match new_conn.await {
+                Ok(conn) => {
+                    info!("New connection established");
+                    let h3_conn = h3::server::builder()
+                        .enable_webtransport(true)
+                        .enable_datagram(true)
+                        .enable_extended_connect(true)
+                        .build(h3_quinn::Connection::new(conn))
+                        .await
+                        .unwrap();
+
+                    if let Err(err) = handle_connection(h3_conn, files_dir).await {
+                        info!("Connection ended: {err:?}");
+                    }
+                }
+                Err(err) => {
+                    error!("Accepting connection failed: {:?}", err);
+                }
+            }
+        });
+    }
+
+    endpoint.wait_idle().await;
+    Ok(())
+}

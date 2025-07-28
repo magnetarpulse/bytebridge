@@ -1,0 +1,273 @@
+use anyhow::Result;
+use bytes::Bytes;
+use h3::{
+    ext::Protocol,
+    server::{RequestResolver, Connection},
+};
+use h3_webtransport::server::WebTransportSession;
+use http::Method;
+use std::{path::PathBuf, sync::Arc, time::Duration};
+use tokio::fs::File;
+use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
+use tracing::{error, info, instrument, warn};
+use urlencoding::decode;
+
+// Buffer pool for high-throughput scenarios
+static BUFFER_POOL: once_cell::sync::Lazy<Arc<BufferPool>> = once_cell::sync::Lazy::new(|| {
+    Arc::new(BufferPool::new(64 * 1024, 32)) // 64KB buffers, pool of 32
+});
+
+struct BufferPool {
+    buffers: tokio::sync::Mutex<Vec<Vec<u8>>>,
+    buffer_size: usize,
+    max_pool_size: usize,
+}
+
+impl BufferPool {
+    fn new(buffer_size: usize, max_pool_size: usize) -> Self {
+        Self {
+            buffers: tokio::sync::Mutex::new(Vec::new()),
+            buffer_size,
+            max_pool_size,
+        }
+    }
+    
+    async fn get_buffer(&self) -> Vec<u8> {
+        let mut buffers = self.buffers.lock().await;
+        buffers.pop().unwrap_or_else(|| vec![0u8; self.buffer_size])
+    }
+    
+    async fn return_buffer(&self, mut buffer: Vec<u8>) {
+        let mut buffers = self.buffers.lock().await;
+        if buffers.len() < self.max_pool_size {
+            buffer.clear();
+            buffer.resize(self.buffer_size, 0);
+            buffers.push(buffer);
+        }
+        // If pool is full, just let the buffer drop
+    }
+}
+
+async fn copy_with_buffer<R, W>(reader: &mut R, writer: &mut W, mut buffer: Vec<u8>) -> Result<u64>
+where
+    R: AsyncReadExt + Unpin,
+    W: AsyncWrite + Unpin,
+{
+    let mut total_bytes = 0u64;
+    
+    loop {
+        let bytes_read = reader.read(&mut buffer).await?;
+        if bytes_read == 0 {
+            break;
+        }
+        
+        writer.write_all(&buffer[..bytes_read]).await?;
+        total_bytes += bytes_read as u64;
+    }
+    
+    writer.flush().await?;
+    
+    // Return buffer to pool
+    BUFFER_POOL.return_buffer(buffer).await;
+    
+    Ok(total_bytes)
+}
+
+pub async fn handle_connection(
+    mut conn: Connection<h3_quinn::Connection, Bytes>,
+    files_dir: Arc<PathBuf>,
+) -> Result<()> {
+    if let Ok(Some(resolver)) = conn.accept().await {
+        handle_request(resolver, conn, files_dir).await;
+    }
+    Ok(())
+}
+
+async fn handle_request(
+    resolver: RequestResolver<h3_quinn::Connection, Bytes>,
+    conn: Connection<h3_quinn::Connection, Bytes>,
+    files_dir: Arc<PathBuf>,
+) {
+    let (req, stream) = match resolver.resolve_request().await {
+        Ok(req) => req,
+        Err(err) => {
+            error!("Failed to resolve request: {:?}", err);
+            return;
+        }
+    };
+    
+    if let (&Method::CONNECT, Some(&Protocol::WEB_TRANSPORT)) = (req.method(), req.extensions().get::<Protocol>()) {
+        info!("Peer wants to initiate a WebTransport session for path: {}", req.uri().path());
+        
+        let path = req.uri().path().to_string();
+        
+        if let Some(upload_id) = path.strip_prefix("/upload/") {
+            let session = match WebTransportSession::accept(req, stream, conn).await {
+                Ok(s) => s,
+                Err(e) => { error!("Failed to accept WT session: {:?}", e); return; }
+            };
+            info!("Accepted upload session for '{}'", upload_id);
+            if let Err(e) = handle_upload_session(session, files_dir).await {
+                error!("Upload session error: {:?}", e);
+            }
+        } else if let Some(filename_str) = path.strip_prefix("/download/") {
+            let session = match WebTransportSession::accept(req, stream, conn).await {
+                Ok(s) => s,
+                Err(e) => { error!("Failed to accept WT session: {:?}", e); return; }
+            };
+            info!("Accepted download session for '{}'", filename_str);
+            if let Err(e) = handle_download_session(session, files_dir, filename_str).await {
+                error!("Download session error: {:?}", e);
+            }
+        } else {
+            warn!("Rejecting WebTransport session for unknown path: {}", path);
+        }
+    } else {
+        warn!("Rejecting non-WebTransport request: {} {}", req.method(), req.uri().path());
+    }
+}
+
+#[instrument(skip_all)]
+async fn handle_upload_session(
+    session: WebTransportSession<h3_quinn::Connection, Bytes>,
+    files_dir: Arc<PathBuf>,
+) -> Result<()> {
+    // Extract upload ID from the URL path
+    let session_id = session.session_id();
+    let upload_id = format!("{:?}", session_id);
+    info!("Started WebTransport session for upload: {}", upload_id);
+    
+    // Accept multiple streams over the same session
+    while let Ok(stream_result) = tokio::time::timeout(Duration::from_secs(60), session.accept_uni()).await {
+        match stream_result {
+            Ok(Some((_, mut stream))) => {
+                // Clone necessary values for the task
+                let files_dir = files_dir.clone();
+                
+                // Process the stream - read the first line as metadata
+                let mut metadata_line = String::new();
+                let mut found_newline = false;
+                let mut buffer = [0u8; 1024];
+                let mut pos = 0;
+                
+                // Read until we find a newline
+                while let Ok(bytes_read) = stream.read(&mut buffer[pos..]).await {
+                    if bytes_read == 0 {
+                        break; // End of stream
+                    }
+                    
+                    // Check for newline in this chunk
+                    for i in pos..pos+bytes_read {
+                        if buffer[i] == b'\n' {
+                            let metadata_bytes = &buffer[0..i];
+                            metadata_line = String::from_utf8_lossy(metadata_bytes).to_string();
+                            found_newline = true;
+                            pos = i + 1; // Position after newline
+                            break;
+                        }
+                    }
+                    
+                    if found_newline {
+                        break;
+                    }
+                    
+                    pos += bytes_read;
+                    if pos >= buffer.len() {
+                        // Metadata too large, something is wrong
+                        error!("Metadata too large, rejecting stream");
+                        break;
+                    }
+                }
+                
+                if !found_newline || metadata_line.is_empty() {
+                    error!("No metadata found in stream");
+                    continue;
+                }
+                
+                // Parse the JSON metadata (using simple string operations since serde isn't available)
+                if let Some(filename) = extract_filename_from_metadata(&metadata_line) {
+                    info!("Processing file: {}", filename);
+                    
+                    // Create the file
+                    let filepath = files_dir.join(filename);
+                    if let Ok(mut file) = File::create(&filepath).await {
+                        // Write the remaining buffer (after the newline)
+                        if pos < buffer.len() {
+                            let remaining = &buffer[pos..pos];
+                            if !remaining.is_empty() {
+                                let _ = file.write_all(remaining).await;
+                            }
+                        }
+                        
+                        // Continue reading the stream to the file
+                        let mut file_buffer = [0u8; 16384];
+                        while let Ok(bytes_read) = stream.read(&mut file_buffer).await {
+                            if bytes_read == 0 {
+                                break; // End of stream
+                            }
+                            let _ = file.write_all(&file_buffer[..bytes_read]).await;
+                        }
+                        
+                        let _ = file.flush().await;
+                        info!("Finished writing file: {:?}", filepath);
+                    } else {
+                        error!("Failed to create file: {:?}", filepath);
+                    }
+                }
+            },
+            _ => break, // Session closed or error
+        }
+    }
+    
+    info!("WebTransport session ended for upload ID: {}", upload_id);
+    Ok(())
+}
+
+// Helper function to extract filename from JSON metadata
+fn extract_filename_from_metadata(metadata: &str) -> Option<String> {
+    // Simple extraction without full JSON parsing
+    if let Some(start) = metadata.find("\"filename\":") {
+        let value_start = metadata[start..].find(":\"")? + start + 2;
+        let value_end = metadata[value_start..].find("\"")? + value_start;
+        Some(metadata[value_start..value_end].to_string())
+    } else {
+        None
+    }
+}
+
+#[instrument(skip_all, fields(filename = %filename_encoded))]
+async fn handle_download_session(
+    session: WebTransportSession<h3_quinn::Connection, Bytes>,
+    files_dir: Arc<PathBuf>,
+    filename_encoded: &str, 
+) -> Result<()> {
+    let filename = decode(filename_encoded)?;
+    let filepath = files_dir.join(filename.as_ref());
+
+    if !filepath.exists() {
+        error!("Requested file not found: {:?}", filepath);
+        return Ok(());
+    }
+
+    info!("Opening a server-initiated stream to send '{:?}'", filepath);
+
+    let mut stream = session.open_uni(session.session_id()).await?;
+    
+    let file = File::open(&filepath).await?;
+    let mut buf_reader = BufReader::new(file);
+    
+    // Use pooled buffer for high-throughput transfers
+    let buffer = BUFFER_POOL.get_buffer().await;
+    let bytes_copied = copy_with_buffer(&mut buf_reader, &mut stream, buffer).await?;
+    
+    // Properly close the stream
+    stream.shutdown().await?;
+    
+    info!("Finished sending file: {:?} ({} bytes)", filepath, bytes_copied);
+
+    // Add a small, non-blocking delay to give the client a grace period to process
+    // the end-of-stream signal before the server's connection object is dropped.
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    
+    Ok(())
+}
