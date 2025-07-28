@@ -1,0 +1,228 @@
+{% extends "integrations/base.html" %}
+{% block title %}Register DataStore{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-0"><i class="bi bi-database"></i> Register DataStore</h4>
+            </div>
+            <div class="card-body">
+                <p class="mb-4">
+                    Register a DataStore with NeuroController. You'll need the following information:
+                </p>
+                
+                <form id="registrationForm" method="post" action="{% url 'integrations:register_datastore' %}">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label for="datastoreSelect" class="form-label">Select DataStore</label>
+                        <select class="form-select" id="datastoreSelect" name="datastore_id" required>
+                            <option value="" selected disabled>--- Select a datastore ---</option>
+                            {% for datastore in datastores %}
+                                <option value="{{ datastore.id }}">
+                                    {{ datastore.name }} ({{ datastore.get_permission_type_display }})
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="idToken" class="form-label">Admin ID Token</label>
+                        <input type="text" class="form-control" id="idToken" name="id_token" required 
+                               placeholder="Enter your administrator identification token">
+                        <div class="form-text">Your personal administrator identification token from NeuroController.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="verifierToken" class="form-label">Verifier Token</label>
+                        <input type="text" class="form-control" id="verifierToken" name="verifier_token" required 
+                               placeholder="Enter one-time verifier token">
+                        <div class="form-text">One-time verification token generated for this registration from NeuroController.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="registerToken" class="form-label">Register Token</label>
+                        <input type="text" class="form-control" id="registerToken" name="register_token" required 
+                               placeholder="Enter DataStore register token">
+                        <div class="form-text">Token authorizing DataStore registration from NeuroController.</div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary" id="registerButton">
+                        <i class="bi bi-box-arrow-in-right"></i> Start Registration
+                    </button>
+                </form>
+                
+                <div id="registrationStatus" class="mt-4 d-none">
+                    <h5><i class="bi bi-arrow-repeat"></i> Registration Status</h5>
+                    
+                    <div class="progress mb-3">
+                        <div id="registrationProgress" class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" style="width: 0%"></div>
+                    </div>
+                    
+                    <div id="statusMessages" class="polling-container">
+                        <!-- Polling messages will be inserted here -->
+                    </div>
+                    
+                    <div id="finalStatus" class="alert mt-3 d-none">
+                        <!-- Final status message will appear here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function() {
+        let startTime;
+        
+        // Setup CSRF token for all AJAX requests
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        
+        const csrftoken = getCookie('csrftoken');
+        
+        // Set up CSRF token for all jQuery AJAX requests
+        $.ajaxSetup({
+            beforeSend: function(xhr, settings) {
+                if (!/^(GET|HEAD|OPTIONS|TRACE)$/i.test(settings.type) && !this.crossDomain) {
+                    // Set both case variants of the header to ensure it works with proxies or SSH forwarding
+                    xhr.setRequestHeader("X-CSRFToken", csrftoken);
+                    xhr.setRequestHeader("X-Csrftoken", csrftoken);
+                    
+                    if (settings.type === "POST" && settings.data && settings.processData !== false) {
+                        try {
+                            if (typeof settings.data === 'string' && settings.contentType.includes('application/json')) {
+                                let jsonData = JSON.parse(settings.data);
+                                jsonData.csrfmiddlewaretoken = csrftoken;
+                                settings.data = JSON.stringify(jsonData);
+                            }
+                        } catch (e) {
+                            console.error("Error adding CSRF token to JSON data:", e);
+                        }
+                    }
+                }
+            }
+        });
+        
+        $('#registrationForm').on('submit', function(e) {
+            e.preventDefault();
+            
+            // Show the status section
+            $('#registrationStatus').removeClass('d-none');
+            $('#registrationProgress').css('width', '10%');
+            addStatusMessage('Starting registration process...');
+            
+            // Disable the form
+            $('#registerButton').prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Registering...');
+            
+            // Reset status
+            $('#finalStatus').addClass('d-none');
+            startTime = new Date();
+            
+            // Get form data
+            const formData = {
+                datastore_id: $('#datastoreSelect').val(),
+                id_token: $('#idToken').val(),
+                verifier_token: $('#verifierToken').val(),
+                register_token: $('#registerToken').val(),
+            };
+            
+            // Inform user that registration might take time
+            addStatusMessage('Registration in progress. This may take a while if 2FA verification is needed...');
+            $('#registrationProgress').css('width', '50%');
+            
+            // Send registration request and wait for completion
+            $.ajax({
+                url: "{% url 'integrations:api_register_datastore' %}",
+                type: "POST",
+                data: JSON.stringify(formData),
+                contentType: "application/json",
+                dataType: "json",
+                // The CSRF token is automatically added by the ajaxSetup
+                success: function(response) {
+                    if (response.status === 'success') {
+                        completeRegistration(true, response.message || 'Registration completed successfully!');
+                    } else {
+                        completeRegistration(false, response.message || 'Registration failed with an unknown error');
+                    }
+                },
+                error: function(xhr) {
+                    let errorMessage = 'Registration failed';
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        errorMessage = response.message || errorMessage;
+                    } catch (e) {
+                        errorMessage = 'Registration failed: ' + xhr.status + ' ' + xhr.statusText;
+                    }
+                    
+                    completeRegistration(false, errorMessage);
+                }
+            });
+        });
+        
+        function completeRegistration(success, message) {
+            // Update progress bar
+            $('#registrationProgress').css('width', '100%');
+            if (!success) {
+                $('#registrationProgress').removeClass('progress-bar-animated').addClass('bg-danger');
+            } else {
+                $('#registrationProgress').removeClass('progress-bar-animated').addClass('bg-success');
+            }
+            
+            // Show final status
+            $('#finalStatus')
+                .removeClass('d-none alert-success alert-danger')
+                .addClass(success ? 'alert-success' : 'alert-danger')
+                .html((success ? '<i class="bi bi-check-circle"></i> ' : '<i class="bi bi-exclamation-triangle"></i> ') + message);
+            
+            // Re-enable form
+            $('#registerButton').prop('disabled', false).html('<i class="bi bi-box-arrow-in-right"></i> Start Registration');
+            
+            // Add final message
+            addStatusMessage(message);
+            addStatusMessage('Process completed in ' + getElapsedTime());
+        }
+        
+        function addStatusMessage(message, replace = false) {
+            const time = new Date().toLocaleTimeString();
+            const messageHtml = `<div class="polling-message">
+                <span class="polling-time">${time}</span>
+                <span class="polling-text">${message}</span>
+            </div>`;
+            
+            if (replace && $('.polling-message').length > 0) {
+                $('.polling-message:last').html(`<span class="polling-time">${time}</span>
+                <span class="polling-text">${message}</span>`);
+            } else {
+                $('#statusMessages').append(messageHtml);
+                $('#statusMessages').scrollTop($('#statusMessages')[0].scrollHeight);
+            }
+        }
+        
+        function getElapsedTime() {
+            const elapsed = Math.floor((new Date() - startTime) / 1000);
+            const minutes = Math.floor(elapsed / 60);
+            const seconds = elapsed % 60;
+            return minutes + 'm ' + seconds + 's';
+        }
+    });
+</script>
+{% endblock %}

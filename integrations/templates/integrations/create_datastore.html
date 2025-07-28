@@ -1,0 +1,207 @@
+{% extends "integrations/base.html" %}
+{% block title %}Create DataStore{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-0"><i class="bi bi-database-add"></i> Create New DataStore</h4>
+            </div>
+            <div class="card-body">
+                <p class="mb-4">
+                    Create a new DataStore within your ByteBridge instance. DataStores are containers for organizing your data.
+                </p>
+                
+                {% if not instances %}
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i> You need to register a ByteBridge instance first before creating a DataStore.
+                    <a href="{% url 'integrations:register_instance' %}" class="alert-link">Register a ByteBridge instance</a>
+                </div>
+                {% else %}
+                
+                <form id="createDatastoreForm" method="post">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label for="instanceSelect" class="form-label">Select ByteBridge Instance</label>
+                        <select class="form-select" id="instanceSelect" name="instance_id" required>
+                            <option value="" selected disabled>--- Select an instance ---</option>
+                            {% for instance in instances %}
+                                <option value="{{ instance.id }}">
+                                    {{ instance.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">The ByteBridge instance this DataStore will belong to.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="datastoreName" class="form-label">DataStore Name</label>
+                        <input type="text" class="form-control" id="datastoreName" name="name" required 
+                               placeholder="Enter a name for your DataStore">
+                        <div class="form-text">A descriptive name for your DataStore.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="permissionType" class="form-label">Permission Type</label>
+                        <select class="form-select" id="permissionType" name="permission_type" required>
+                            <option value="" selected disabled>--- Select permission type ---</option>
+                            {% for value, display_name in permission_choices %}
+                                <option value="{{ value }}">{{ display_name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Controls who can access the data in this DataStore.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="datastoreDescription" class="form-label">Description (Optional)</label>
+                        <textarea class="form-control" id="datastoreDescription" name="description" 
+                                  rows="3" placeholder="Enter a description"></textarea>
+                        <div class="form-text">A brief description of what this DataStore will be used for.</div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary" id="createButton">
+                        <i class="bi bi-plus-circle"></i> Create DataStore
+                    </button>
+                </form>
+                
+                <div id="creationStatus" class="mt-4 d-none">
+                    <div class="progress mb-3">
+                        <div id="creationProgress" class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" style="width: 0%"></div>
+                    </div>
+                    
+                    <div id="statusMessage" class="mt-3 d-none">
+                        <!-- Status message will appear here -->
+                    </div>
+                </div>
+                
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function() {
+        // Setup CSRF token for all AJAX requests
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        
+        const csrftoken = getCookie('csrftoken');
+        
+        // Set up CSRF token for all jQuery AJAX requests
+        $.ajaxSetup({
+            beforeSend: function(xhr, settings) {
+                if (!/^(GET|HEAD|OPTIONS|TRACE)$/i.test(settings.type) && !this.crossDomain) {
+                    // Set both case variants of the header to ensure it works with proxies or SSH forwarding
+                    xhr.setRequestHeader("X-CSRFToken", csrftoken);
+                    xhr.setRequestHeader("X-Csrftoken", csrftoken);
+                    
+                    if (settings.type === "POST" && settings.data && settings.processData !== false) {
+                        try {
+                            if (typeof settings.data === 'string' && settings.contentType.includes('application/json')) {
+                                let jsonData = JSON.parse(settings.data);
+                                jsonData.csrfmiddlewaretoken = csrftoken;
+                                settings.data = JSON.stringify(jsonData);
+                            }
+                        } catch (e) {
+                            console.error("Error adding CSRF token to JSON data:", e);
+                        }
+                    }
+                }
+            }
+        });
+        
+        $('#createDatastoreForm').on('submit', function(e) {
+            e.preventDefault();
+            
+            // Show the status section
+            $('#creationStatus').removeClass('d-none');
+            $('#creationProgress').css('width', '50%');
+            
+            // Disable the form
+            $('#createButton').prop('disabled', true).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Creating...');
+            
+            // Reset status
+            $('#statusMessage').addClass('d-none');
+            
+            // Get form data
+            const formData = {
+                instance_id: $('#instanceSelect').val(),
+                name: $('#datastoreName').val(),
+                permission_type: $('#permissionType').val(),
+                description: $('#datastoreDescription').val()
+            };
+            
+            // Send creation request
+            $.ajax({
+                url: "{% url 'integrations:api_create_datastore' %}",
+                type: "POST",
+                data: JSON.stringify(formData),
+                contentType: "application/json",
+                dataType: "json",
+                success: function(response) {
+                    if (response.status === 'success') {
+                        completeCreation(true, response.message);
+                        
+                        // Optionally, redirect to the register datastore page
+                        setTimeout(function() {
+                            window.location.href = "{% url 'integrations:register_datastore' %}";
+                        }, 2000);
+                    } else {
+                        completeCreation(false, response.message || 'DataStore creation failed with an unknown error');
+                    }
+                },
+                error: function(xhr) {
+                    let errorMessage = 'DataStore creation failed';
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        errorMessage = response.message || errorMessage;
+                    } catch (e) {
+                        errorMessage = 'Creation failed: ' + xhr.status + ' ' + xhr.statusText;
+                    }
+                    
+                    completeCreation(false, errorMessage);
+                }
+            });
+        });
+        
+        function completeCreation(success, message) {
+            // Update progress bar
+            $('#creationProgress').css('width', '100%');
+            if (!success) {
+                $('#creationProgress').removeClass('progress-bar-animated').addClass('bg-danger');
+            } else {
+                $('#creationProgress').removeClass('progress-bar-animated').addClass('bg-success');
+            }
+            
+            // Show message
+            $('#statusMessage')
+                .removeClass('d-none alert-success alert-danger')
+                .addClass(success ? 'alert alert-success' : 'alert alert-danger')
+                .html((success ? '<i class="bi bi-check-circle"></i> ' : '<i class="bi bi-exclamation-triangle"></i> ') + message);
+            
+            // Re-enable form if error
+            if (!success) {
+                $('#createButton').prop('disabled', false).html('<i class="bi bi-plus-circle"></i> Create DataStore');
+            }
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,233 @@
+{% extends "integrations/base.html" %}
+{% block title %}DataStore: {{ datastore.name }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-10 mx-auto">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0"><i class="bi bi-database"></i> DataStore: {{ datastore.name }}</h4>
+                <div>
+                    <button id="sync-datastore-btn" 
+                            class="btn btn-primary" 
+                            data-datastore-id="{{ datastore.id }}">
+                        <i class="bi bi-arrow-repeat"></i> Synchronize with NeuroController
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                {% csrf_token %}
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <h5>DataStore Information</h5>
+                        <table class="table">
+                            <tr>
+                                <th width="30%">Name:</th>
+                                <td>{{ datastore.name }}</td>
+                            </tr>
+                            <tr>
+                                <th>Permission Type:</th>
+                                <td>
+                                    {% if datastore.permission_type == 'private' %}
+                                        <span class="badge bg-secondary">Private</span>
+                                    {% elif datastore.permission_type == 'public' %}
+                                        <span class="badge bg-info">Public</span>
+                                    {% else %}
+                                        <span class="badge bg-primary">Community</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Parent Instance:</th>
+                                <td>{{ datastore.instance.name }}</td>
+                            </tr>
+                            <tr>
+                                <th>Created At:</th>
+                                <td>{{ datastore.created_at|date:"F j, Y, g:i a" }}</td>
+                            </tr>
+                            <tr>
+                                <th>Registration Status:</th>
+                                <td>
+                                    {% if datastore.is_registered %}
+                                        <span class="badge bg-success">Registered with NeuroController</span>
+                                    {% else %}
+                                        <span class="badge bg-warning">Not Registered</span>
+                                        <a href="{% url 'integrations:register_datastore' %}" class="btn btn-sm btn-outline-primary ms-2">Register Now</a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h5>Storage Summary</h5>
+                        <table class="table">
+                            <tr>
+                                <th width="30%">Buckets:</th>
+                                <td>{{ bucket_count }}</td>
+                            </tr>
+                            <tr>
+                                <th>Objects:</th>
+                                <td>{{ object_count }}</td>
+                            </tr>
+                            <tr>
+                                <th>Total Size:</th>
+                                <td>{{ total_size|filesizeformat }}</td>
+                            </tr>
+                            <tr>
+                                <th>Last Synchronized:</th>
+                                <td id="last-synced-time">
+                                    {% if datastore.last_synced %}
+                                        {{ datastore.last_synced|date:"F j, Y, g:i a" }}
+                                    {% else %}
+                                        <em>Never</em>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                
+                <div id="sync-result" class="mt-3 d-none">
+                    <!-- Synchronization results will appear here -->
+                </div>
+                
+                <h5 class="mt-4 mb-3">Buckets</h5>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Objects</th>
+                                <th>Permission</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for bucket in buckets %}
+                            <tr>
+                                <td>{{ bucket.name }}</td>
+                                <td>{{ bucket.object_count }}</td>
+                                <td>
+                                    {% if bucket.permission_type == 'private' %}
+                                        <span class="badge bg-secondary">Private</span>
+                                    {% elif bucket.permission_type == 'public' %}
+                                        <span class="badge bg-info">Public</span>
+                                    {% else %}
+                                        <span class="badge bg-primary">Community</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ bucket.created_at|date:"M d, Y" }}</td>
+                                <td>
+                                    <a href="#" class="btn btn-sm btn-outline-primary">View</a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center">No buckets available in this DataStore.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const syncButton = document.getElementById('sync-datastore-btn');
+    
+    if (syncButton) {
+        syncButton.addEventListener('click', function() {
+            const datastoreId = this.getAttribute('data-datastore-id');
+            const button = this;
+            
+            // Disable button and show loading state
+            button.disabled = true;
+            button.innerHTML = '<i class="bi bi-arrow-repeat"></i> <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Synchronizing...';
+            
+            // Show result container
+            const resultDiv = document.getElementById('sync-result');
+            resultDiv.classList.remove('d-none');
+            resultDiv.innerHTML = `
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> Synchronization in progress...
+                </div>
+            `;
+            
+            // Make API request
+            fetch('/integrations/api/sync/datastore', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({
+                    datastore_id: datastoreId
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Reset button
+                button.disabled = false;
+                button.innerHTML = '<i class="bi bi-arrow-repeat"></i> Synchronize with NeuroController';
+                
+                // Show results
+                if (data.status === 'success') {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-success">
+                            <i class="bi bi-check-circle"></i> <strong>Synchronization successful!</strong><br>
+                            <div class="mt-2">
+                                <strong>Buckets:</strong> ${data.stats.buckets_synced} synced, ${data.stats.buckets_failed} failed<br>
+                                <strong>Objects:</strong> ${data.stats.objects_synced} synced, ${data.stats.objects_failed} failed
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Update the last synced time without page reload
+                    const now = new Date();
+                    const options = { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: 'numeric', hour12: true };
+                    const formattedDate = now.toLocaleDateString('en-US', options);
+                    
+                    // Update the last synced time by ID
+                    const lastSyncedElement = document.getElementById('last-synced-time');
+                    if (lastSyncedElement) {
+                        lastSyncedElement.textContent = formattedDate;
+                    }
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle"></i> <strong>Synchronization failed</strong><br>
+                            ${data.message}
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                // Reset button
+                button.disabled = false;
+                button.innerHTML = '<i class="bi bi-arrow-repeat"></i> Synchronize with NeuroController';
+                
+                // Show error
+                resultDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i> <strong>Error during synchronization</strong><br>
+                        ${error.message}
+                    </div>
+                `;
+                console.error('Sync error:', error);
+            });
+        });
+    }
+});
+</script>
+{% endblock %}
