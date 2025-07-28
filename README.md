@@ -28,6 +28,7 @@ If you are running the program for the first time, you will need to migrate the 
 ```
 python manage.py makemigrations bytebridge
 python manage.py migrate
+python manage.py collectstatic
 ```
 
 To start the ByteBridge program run:
