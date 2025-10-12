@@ -63,7 +63,9 @@ DEBUG = env('DEBUG')
 ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
-    '[::1]'
+    '[::1]',
+    '129.114.108.18',
+    '129.114.108.18.sslip.io'
 ]
 
 # Application definition
@@ -108,6 +110,13 @@ MIDDLEWARE = [
 ]
 
 CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = [
+    "https://129.114.108.18.sslip.io:8000",
+    "https://129.114.108.18:8000",  # If needed
+]
+
+
+FRONTEND_URL = 'https://129.114.108.18.sslip.io:8000'
 
 # For development only!
 '''
@@ -150,6 +159,7 @@ LOGIN_REDIRECT_URL = 'integrations:dashboard'
 LOGOUT_REDIRECT_URL = 'login'
 
 WSGI_APPLICATION = 'bytebridge.wsgi.application'
+ASGI_APPLICATION = 'bytebridge.asgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
@@ -244,6 +254,17 @@ SIMPLE_JWT = {
     'TOKEN_TYPE_CLAIM': 'token_type',
     'VERIFY_EXPIRATION': True,  
 }
+
+# Email configuration
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# SMTP settings for production (uncomment and configure as needed)
+# EMAIL_HOST = 'smtp.gmail.com'  
+# EMAIL_PORT = 587
+# EMAIL_USE_TLS = True
+# EMAIL_HOST_USER = 'your-email@gmail.com'
+# EMAIL_HOST_PASSWORD = 'your-password'
+# DEFAULT_FROM_EMAIL = 'your-email@gmail.com'
 
 # Host configuration
 HOSTNAME = socket.gethostname()
