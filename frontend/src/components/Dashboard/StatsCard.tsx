@@ -11,7 +11,7 @@ interface StatsCardProps {
   trend: 'up' | 'down' | 'neutral';
 }
 
-const StatsCard: React.FC<StatsCardProps> = ({ title, value, change, trend }) => {
+const StatsCard: React.FC<StatsCardProps> = React.memo(({ title, value, change, trend }) => {
   const { mode } = useTheme();
   const theme = useMuiTheme();
   
@@ -44,6 +44,8 @@ const StatsCard: React.FC<StatsCardProps> = ({ title, value, change, trend }) =>
       </Typography>
     </Paper>
   );
-};
+});
+
+StatsCard.displayName = 'StatsCard';
 
 export default StatsCard;

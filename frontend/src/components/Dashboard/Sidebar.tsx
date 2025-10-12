@@ -1,4 +1,11 @@
-import React from 'react';
+/**
+ * @file Sidebar.tsx
+ * @description Navigation sidebar component for the dashboard.
+ * Provides responsive navigation menu with role-based access control and feature flags.
+ * Supports both permanent (desktop) and temporary (mobile) drawer variants.
+ */
+
+import React, { useMemo } from 'react';
 import {
   Drawer,
   List,
@@ -24,50 +31,135 @@ import {
   AdminPanelSettings as AdminIcon
 } from '@mui/icons-material';
 import { Link, useLocation } from 'react-router-dom';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload'; 
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import { isFeatureEnabled } from '../../config/features';
+import { useCan, PERMISSIONS_CONST } from '../../context/RBACContext';
 
+/**
+ * Props for the Sidebar component.
+ */
 interface SidebarProps {
+  /** Controls mobile drawer open/closed state */
   mobileOpen: boolean;
+  /** Callback to toggle mobile drawer visibility */
   handleDrawerToggle: () => void;
+  /** Drawer variant: permanent (desktop) or temporary (mobile) */
   variant: "permanent" | "persistent" | "temporary";
-  collapsed: boolean; 
-  toggleCollapse?: () => void; 
+  /** Whether sidebar is in collapsed state (icons only) */
+  collapsed: boolean;
+  /** Optional callback to toggle collapsed state */
+  toggleCollapse?: () => void;
 }
 
+/** Width of expanded sidebar in pixels */
 const drawerWidth = 240;
+
+/** Width of collapsed sidebar in pixels (icons only) */
 const collapsedDrawerWidth = 72;
 
+/**
+ * Sidebar navigation component with responsive behavior and RBAC.
+ * 
+ * Features:
+ * - Responsive drawer that adapts to screen size
+ * - Collapsible mode for desktop (icons only)
+ * - Role-based menu item filtering
+ * - Feature flag integration for conditional items
+ * - Active route highlighting
+ * - Organized menu sections (Navigation, Resources, Management, Account)
+ * 
+ * @param props - Component props
+ * @returns Responsive sidebar navigation component
+ * 
+ * @example
+ * ```tsx
+ * <Sidebar
+ *   mobileOpen={false}
+ *   handleDrawerToggle={() => {}}
+ *   variant="permanent"
+ *   collapsed={false}
+ * />
+ * ```
+ */
 const Sidebar: React.FC<SidebarProps> = ({ 
   mobileOpen, 
   handleDrawerToggle,
   variant,
   collapsed
 }) => {
+  /** Current route location for active state detection */
   const location = useLocation();
+  
+  /** MUI theme instance for styling */
   const theme = useTheme();
+  
+  /** Permission check: user can access admin functionality */
+  const canAccessAdmin = useCan(PERMISSIONS_CONST.ADMIN);
+  
+  /** Permission check: user can access upload functionality */
+  const canUpload = useCan(PERMISSIONS_CONST.UPLOAD);
 
-  const navigationItems = [
+  /**
+   * Primary navigation items (always visible).
+   * Memoized to prevent unnecessary re-renders.
+   */
+  const navigationItems = useMemo(() => [
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
-  ];
+  ], []);
 
-  const resourceItems = [
-    { text: 'ByteBridges', icon: <CloudIcon />, path: '/dashboard/bytebridges' },
-    { text: 'DataStores', icon: <StorageIcon />, path: '/dashboard/datastores' },
-    { text: 'Repositories', icon: <AccountTreeIcon />, path: '/dashboard/repositories' },
-    { text: 'Files', icon: <FileIcon />, path: '/dashboard/files' },
-    { text: 'File Upload', icon: <CloudUploadIcon />, path: '/dashboard/upload' },
-  ];
+  /**
+   * Resource management navigation items.
+   * Conditionally includes upload based on feature flags and permissions.
+   * Memoized with canUpload dependency to update when permissions change.
+   */
+  const resourceItems = useMemo(() => {
+    const items = [
+      { text: 'ByteBridges', icon: <CloudIcon />, path: '/dashboard/bytebridges' },
+      { text: 'DataStores', icon: <StorageIcon />, path: '/dashboard/datastores' },
+      { text: 'Repositories', icon: <AccountTreeIcon />, path: '/dashboard/repositories' },
+      { text: 'Files', icon: <FileIcon />, path: '/dashboard/files' },
+    ];
+    
+    if (isFeatureEnabled('upload') && canUpload) {
+      items.push({ text: 'File Upload', icon: <CloudUploadIcon />, path: '/dashboard/upload' });
+    }
+    
+    return items;
+  }, [canUpload]);
   
-  const managementItems = [
-    { text: 'Teams', icon: <PeopleIcon />, path: '/dashboard/teams' },
-    { text: 'Admin', icon: <AdminIcon />, path: '/dashboard/admin' },
-  ];
+  /**
+   * Management section navigation items.
+   * Filtered based on feature flags and user permissions.
+   * Memoized with canAccessAdmin dependency to update when permissions change.
+   */
+  const managementItems = useMemo(() => {
+    const items = [];
+    
+    if (isFeatureEnabled('teams')) {
+      items.push({ text: 'Teams', icon: <PeopleIcon />, path: '/dashboard/teams' });
+    }
+    
+    if (isFeatureEnabled('admin') && canAccessAdmin) {
+      items.push({ text: 'Admin', icon: <AdminIcon />, path: '/dashboard/admin' });
+    }
+    
+    return items;
+  }, [canAccessAdmin]);
   
-  const accountItems = [
+  /**
+   * Account section navigation items (always visible).
+   * Memoized to prevent unnecessary re-renders.
+   */
+  const accountItems = useMemo(() => [
     { text: 'Account', icon: <SettingsIcon />, path: '/dashboard/account' },
-  ];
+  ], []);
 
-  // Helper function to render menu items
+  /**
+   * Renders a list of navigation menu items with active state highlighting.
+   * 
+   * @param items - Array of navigation items to render
+   * @returns Array of rendered ListItem components
+   */
   const renderMenuItems = (items: Array<{text: string, icon: React.ReactElement, path: string}>) => {
     return items.map((item) => {
       const isActive = location.pathname === item.path || 
@@ -118,7 +210,13 @@ const Sidebar: React.FC<SidebarProps> = ({
     });
   };
 
-  // Helper function to render section headers
+  /**
+   * Renders a section header for menu groups.
+   * Hidden when sidebar is collapsed to maintain clean icon-only layout.
+   * 
+   * @param title - Section title to display
+   * @returns Section header Typography component or null if collapsed
+   */
   const renderSectionHeader = (title: string) => {
     if (collapsed) return null;
     
@@ -183,6 +281,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     </Box>
   );
 
+  /** Current sidebar width based on collapsed state */
   const currentWidth = collapsed ? collapsedDrawerWidth : drawerWidth;
 
   return (

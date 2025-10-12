@@ -7,7 +7,7 @@ import { useAuth } from '../../context/AuthenticationContext';
 import { Link } from 'react-router-dom';
 import LogoutDialog from '../Account/Logout';
 
-const UserMenu: React.FC = () => {
+const UserMenu: React.FC = React.memo(() => {
   const { user } = useAuth();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
@@ -134,6 +134,8 @@ const UserMenu: React.FC = () => {
       />
     </>
   );
-};
+});
+
+UserMenu.displayName = 'UserMenu';
 
 export default UserMenu;

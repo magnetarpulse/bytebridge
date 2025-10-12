@@ -20,7 +20,7 @@ const activities: Activity[] = [
   { user: 'Emily Chen', action: 'Data analysis completed', status: 'Completed', time: 'Today' },
 ];
 
-const ActivityTable: React.FC = () => {
+const ActivityTable: React.FC = React.memo(() => {
   const { mode } = useTheme();
   const theme = useMuiTheme();
 
@@ -81,6 +81,8 @@ const ActivityTable: React.FC = () => {
       </CardContent>
     </Card>
   );
-};
+});
+
+ActivityTable.displayName = 'ActivityTable';
 
 export default ActivityTable;
