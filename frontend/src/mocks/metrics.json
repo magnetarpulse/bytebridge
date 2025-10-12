@@ -1,0 +1,26 @@
+[
+  {
+    "title": "Total Users",
+    "value": "1,249",
+    "change": "+12% from last month",
+    "trend": "up"
+  },
+  {
+    "title": "Active Projects",
+    "value": "42",
+    "change": "+3 new this week",
+    "trend": "up"
+  },
+  {
+    "title": "System Load",
+    "value": "28%",
+    "change": "Normal operations",
+    "trend": "neutral"
+  },
+  {
+    "title": "Error Rate",
+    "value": "0.12%",
+    "change": "-0.06% from yesterday",
+    "trend": "down"
+  }
+]
