@@ -1,12 +1,19 @@
+/** @type {import('jest').Config} */
 module.exports = {
   preset: 'ts-jest/presets/default-esm',
-  testEnvironment: 'node',
-  extensionsToTreatAsEsm: ['.ts'],
+  testEnvironment: 'jsdom',
+  extensionsToTreatAsEsm: ['.ts', '.tsx'],
   transform: {
-    '^.+\\.ts$': ['ts-jest', { useESM: true }]
+    '^.+\\.tsx?$': ['ts-jest', { useESM: true }]
   },
   moduleNameMapper: {
-    '^\\./encryption.streaming.worker.js$': '<rootDir>/test/mocks/mock.worker.ts'
+    '^\\./encryption.streaming.worker.ts$': '<rootDir>/test/mocks/mock.worker.ts',
+    '^(\\.{1,2}/.*)\\.js$': '$1'
   },
-  transformIgnorePatterns: ['node_modules/(?!libsodium-wrappers)']
+  transformIgnorePatterns: ['node_modules/(?!libsodium-wrappers)'],
+  roots: ['<rootDir>/src', '<rootDir>/test'],
+  testMatch: [
+    '**/__tests__/**/*.ts',
+    '**/?(*.)+(spec|test).ts'
+  ]
 };
