@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LZ4 File Compression Tool</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --secondary: #3498db;
+            --accent: #1abc9c;
+            --light: #ecf0f1;
+            --dark: #34495e;
+            --success: #2ecc71;
+            --warning: #f39c12;
+            --danger: #e74c3c;
+            --gray: #95a5a6;
+            --card-bg: #ffffff;
+            --border: #e0e0e0;
+            --shadow: rgba(0, 0, 0, 0.08);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e7f1 100%);
+            color: var(--dark);
+            line-height: 1.6;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            color: var(--primary);
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .subtitle {
+            color: var(--gray);
+            font-size: 1.1rem;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 6px 20px var(--shadow);
+            padding: 30px;
+            margin-bottom: 30px;
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .upload-section {
+            border: 2px dashed var(--border);
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            background: #f9f9f9;
+            transition: all 0.3s ease;
+        }
+
+        .upload-section:hover {
+            border-color: var(--secondary);
+            background: #f0f8ff;
+        }
+
+        .upload-icon {
+            font-size: 3rem;
+            color: var(--secondary);
+            margin-bottom: 15px;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            display: inline-block;
+            margin: 20px 0;
+        }
+
+        .file-input-wrapper input[type="file"] {
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+
+        .file-input-button {
+            background: var(--secondary);
+            color: white;
+            padding: 12px 25px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+
+        .file-input-button:hover {
+            background: #2980b9;
+        }
+
+        .file-name {
+            margin-top: 15px;
+            font-size: 0.9rem;
+            color: var(--gray);
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            justify-content: center;
+            margin-top: 25px;
+        }
+
+        .btn {
+            padding: 12px 25px;
+            border-radius: 6px;
+            border: none;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+            font-size: 1rem;
+        }
+
+        .btn-primary {
+            background: var(--secondary);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #2980b9;
+            transform: translateY(-2px);
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background: #27ae60;
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            background: var(--gray);
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .status-container {
+            margin: 25px 0;
+        }
+
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border-left: 4px solid var(--secondary);
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border-left: 4px solid var(--success);
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border-left: 4px solid var(--danger);
+        }
+
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+            border-left: 4px solid var(--warning);
+        }
+
+        .status i {
+            font-size: 1.2rem;
+        }
+
+        .progress-container {
+            margin: 25px 0;
+        }
+
+        .progress-bar {
+            height: 12px;
+            background: #e0e0e0;
+            border-radius: 6px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--secondary);
+            width: 0%;
+            border-radius: 6px;
+            transition: width 0.4s ease;
+            position: relative;
+        }
+
+        .progress-text {
+            text-align: right;
+            font-size: 0.9rem;
+            color: var(--gray);
+        }
+
+        .results-container {
+            margin-top: 30px;
+        }
+
+        .results-title {
+            font-size: 1.4rem;
+            margin-bottom: 15px;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .result-item:last-child {
+            border-bottom: none;
+        }
+
+        .result-label {
+            font-weight: 500;
+            color: var(--dark);
+        }
+
+        .result-value {
+            color: var(--gray);
+            font-family: monospace;
+            word-break: break-all;
+            text-align: right;
+            max-width: 60%;
+        }
+
+        .hash-value {
+            font-family: monospace;
+            background: #f8f9fa;
+            padding: 5px 8px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+
+        .compression-ratio {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .ratio-good {
+            background: rgba(46, 204, 113, 0.15);
+            color: var(--success);
+        }
+
+        .ratio-poor {
+            background: rgba(231, 76, 60, 0.15);
+            color: var(--danger);
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            color: var(--gray);
+            font-size: 0.9rem;
+            padding: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .card {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .controls {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
+                justify-content: center;
+            }
+            
+            .result-item {
+                flex-direction: column;
+                gap: 5px;
+            }
+            
+            .result-value {
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>LZ4 File Compression Tool</h1>
+            <p class="subtitle">High-performance compression and decompression using WebAssembly</p>
+        </header>
+
+        <main>
+            <div class="card">
+                <div class="upload-section">
+                    <div class="upload-icon">
+                        <i class="fas fa-file-archive"></i>
+                    </div>
+                    <h3>Select File for Compression</h3>
+                    <p>Upload any file to test LZ4 compression (recommended: up to 500MB)</p>
+                    
+                    <div class="file-input-wrapper">
+                        <div class="file-input-button">
+                            <i class="fas fa-upload"></i> Choose File
+                        </div>
+                        <input type="file" id="fileInput" accept="*/*">
+                    </div>
+                    
+                    <div class="file-name" id="fileName">No file selected</div>
+                    
+                    <div class="controls">
+                        <button id="testBtn" class="btn btn-primary" onclick="runTest()" disabled>
+                            <i class="fas fa-cogs"></i> Run Compression Test
+                        </button>
+                        <button id="downloadCompressed" class="btn btn-success" onclick="downloadCompressed()" disabled>
+                            <i class="fas fa-download"></i> Download Compressed
+                        </button>
+                        <button id="downloadDecompressed" class="btn btn-success" onclick="downloadDecompressed()" disabled>
+                            <i class="fas fa-download"></i> Download Decompressed
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="status-container" id="statusContainer"></div>
+                
+                <div class="progress-container" id="progressContainer">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="progress-text" id="progressText">Ready to start compression</div>
+                </div>
+                
+                <div class="results-container">
+                    <h3 class="results-title"><i class="fas fa-chart-bar"></i> Compression Results</h3>
+                    <div id="results"></div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>LZ4 WebAssembly Compression Tool | High Performance File Compression</p>
+        </footer>
+    </div>
+
+    <script type="module">
+        import init, { compress, decompress } from './pkg/lz4_wasm_nodejs.js';
+
+        let wasmLoaded = false;
+        let selectedFile = null;
+        let compressedData = null;
+        let decompressedData = null;
+
+        // Simple hash function for verification
+        async function calculateHash(data) {
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        function showStatus(message, type = 'info') {
+            const statusContainer = document.getElementById('statusContainer');
+            statusContainer.innerHTML = `
+                <div class="status ${type}">
+                    <i class="fas ${getStatusIcon(type)}"></i>
+                    <span>${message}</span>
+                </div>
+            `;
+        }
+
+        function getStatusIcon(type) {
+            switch(type) {
+                case 'success': return 'fa-check-circle';
+                case 'error': return 'fa-exclamation-circle';
+                case 'warning': return 'fa-exclamation-triangle';
+                default: return 'fa-info-circle';
+            }
+        }
+
+        function addResult(label, value) {
+            const resultsDiv = document.getElementById('results');
+            const resultItem = document.createElement('div');
+            resultItem.className = 'result-item';
+            
+            if (label.includes('SHA-256')) {
+                resultItem.innerHTML = `
+                    <div class="result-label">${label}</div>
+                    <div class="result-value"><span class="hash-value">${value}</span></div>
+                `;
+            } else if (label === 'Compression ratio') {
+                const ratio = parseFloat(value);
+                const ratioClass = ratio > 30 ? 'ratio-good' : 'ratio-poor';
+                resultItem.innerHTML = `
+                    <div class="result-label">${label}</div>
+                    <div class="result-value"><span class="compression-ratio ${ratioClass}">${value}</span></div>
+                `;
+            } else {
+                resultItem.innerHTML = `
+                    <div class="result-label">${label}</div>
+                    <div class="result-value">${value}</div>
+                `;
+            }
+            
+            resultsDiv.appendChild(resultItem);
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+        }
+
+        function updateProgress(percent, message) {
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+            
+            progressFill.style.width = `${percent}%`;
+            progressText.textContent = `${Math.round(percent)}% - ${message}`;
+        }
+
+        async function loadWasm() {
+            if (wasmLoaded) return;
+            
+            showStatus('Loading WASM module...', 'info');
+            try {
+                await init();
+                wasmLoaded = true;
+                showStatus('WASM module loaded successfully!', 'success');
+            } catch (error) {
+                showStatus(`Failed to load WASM: ${error.message}`, 'error');
+                throw error;
+            }
+        }
+
+        // File input handler
+        document.getElementById('fileInput').addEventListener('change', async (e) => {
+            selectedFile = e.target.files[0];
+            const fileNameDisplay = document.getElementById('fileName');
+            const testBtn = document.getElementById('testBtn');
+            
+            if (selectedFile) {
+                fileNameDisplay.textContent = `${selectedFile.name} (${formatBytes(selectedFile.size)})`;
+                
+                if (selectedFile.size > 500 * 1024 * 1024) {
+                    showStatus('Warning: File is larger than 500MB. This may take a while and could use significant memory.', 'warning');
+                } else {
+                    showStatus(`File selected: ${selectedFile.name} (${formatBytes(selectedFile.size)})`, 'info');
+                }
+                
+                if (!wasmLoaded) {
+                    await loadWasm();
+                }
+                
+                testBtn.disabled = false;
+            } else {
+                fileNameDisplay.textContent = 'No file selected';
+                testBtn.disabled = true;
+            }
+        });
+
+        window.runTest = async function() {
+            if (!selectedFile) {
+                showStatus('Please select a file first', 'error');
+                return;
+            }
+
+            clearResults();
+            compressedData = null;
+            decompressedData = null;
+            document.getElementById('downloadCompressed').disabled = true;
+            document.getElementById('downloadDecompressed').disabled = true;
+            document.getElementById('testBtn').disabled = true;
+
+            try {
+                showStatus('Starting compression test...', 'info');
+                updateProgress(10, 'Reading file...');
+
+                // Read file
+                const fileBuffer = await selectedFile.arrayBuffer();
+                const originalData = new Uint8Array(fileBuffer);
+                
+                addResult('Original filename', selectedFile.name);
+                addResult('Original size', formatBytes(originalData.length));
+                
+                updateProgress(20, 'Calculating original hash...');
+                const originalHash = await calculateHash(originalData);
+                addResult('Original SHA-256', originalHash);
+
+                // Compress
+                updateProgress(30, 'Compressing...');
+                const compressStart = performance.now();
+                
+                compressedData = compress(originalData);
+                
+                const compressTime = performance.now() - compressStart;
+                
+                updateProgress(60, 'Compression complete!');
+                addResult('Compressed size', formatBytes(compressedData.length));
+                addResult('Compression ratio', `${((1 - compressedData.length / originalData.length) * 100).toFixed(2)}%`);
+                addResult('Compression time', `${(compressTime / 1000).toFixed(2)} seconds`);
+                addResult('Compression speed', `${formatBytes(originalData.length / (compressTime / 1000))}/s`);
+
+                // Decompress
+                updateProgress(70, 'Decompressing...');
+                const decompressStart = performance.now();
+                
+                decompressedData = decompress(compressedData);
+                
+                const decompressTime = performance.now() - decompressStart;
+                
+                updateProgress(90, 'Decompression complete!');
+                addResult('Decompressed size', formatBytes(decompressedData.length));
+                addResult('Decompression time', `${(decompressTime / 1000).toFixed(2)} seconds`);
+                addResult('Decompression speed', `${formatBytes(decompressedData.length / (decompressTime / 1000))}/s`);
+
+                // Verify
+                updateProgress(95, 'Verifying integrity...');
+                const decompressedHash = await calculateHash(decompressedData);
+                addResult('Decompressed SHA-256', decompressedHash);
+
+                updateProgress(100, 'Complete!');
+
+                // Final verification
+                if (originalHash === decompressedHash && originalData.length === decompressedData.length) {
+                    showStatus('SUCCESS! File compressed and decompressed correctly. Hashes match perfectly!', 'success');
+                    document.getElementById('downloadCompressed').disabled = false;
+                    document.getElementById('downloadDecompressed').disabled = false;
+                } else {
+                    showStatus('FAILURE! Data integrity check failed. Hashes do not match!', 'error');
+                    addResult('ERROR', 'The decompressed data does not match the original!');
+                }
+
+            } catch (error) {
+                showStatus(`Error during test: ${error.message}`, 'error');
+                console.error('Full error:', error);
+                addResult('Error details', error.stack || error.message);
+            } finally {
+                document.getElementById('testBtn').disabled = false;
+            }
+        };
+
+        window.downloadCompressed = function() {
+            if (!compressedData) return;
+            
+            const blob = new Blob([compressedData], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = selectedFile.name + '.lz4';
+            a.click();
+            URL.revokeObjectURL(url);
+            showStatus('Compressed file downloaded', 'success');
+        };
+
+        window.downloadDecompressed = function() {
+            if (!decompressedData) return;
+            
+            const blob = new Blob([decompressedData], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = selectedFile.name + '.decompressed';
+            a.click();
+            URL.revokeObjectURL(url);
+            showStatus('Decompressed file downloaded', 'success');
+        };
+
+        // Initialize
+        loadWasm();
+    </script>
+</body>
+</html>
