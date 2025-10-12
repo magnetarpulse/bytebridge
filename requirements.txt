@@ -7,12 +7,24 @@ django-filter
 django-environ
 requests
 
+# ASGI servers for high-performance async Django
+hypercorn
+granian>=1.0.0
+
+# High-performance libraries for file operations
+aiofile[caio]       # Linux AIO for true async file I/O
+pysendfile          # Zero-copy file transfers
+orjson              # SIMD-accelerated JSON parsing
+pydantic>=2.0,<3.0  # Rust-backed data validation
+
+# Data processing
 polars
 pandas
 pillow
 
 python-dotenv
 
+# Security
 PyNaCl
 keyring
 keyrings.alt
