@@ -4,11 +4,27 @@ Middleware components for ByteBridge application.
 This module contains security middlewares that provide an additional
 layer of protection beyond the DRF permission classes.
 """
+import sys
 from django.http import HttpResponseForbidden
 from core.models import (
     ByteBridgeInstance, DataStore, 
     Bucket, Object
 )
+
+# Color definitions for console output
+RED = '\033[0;31m'
+GREEN = '\033[0;32m'
+BLUE = '\033[0;34m'
+NC = '\033[0m'  # No Color
+
+def print_status(message):
+    print(f"{BLUE}[INFO] {message}{NC}", file=sys.stderr)
+
+def print_success(message):
+    print(f"{GREEN}[SUCCESS] {message}{NC}", file=sys.stderr)
+
+def print_error(message):
+    print(f"{RED}[ERROR] {message}{NC}", file=sys.stderr)
 
 class PermissionVerificationMiddleware:
     """
@@ -87,6 +103,7 @@ class PermissionVerificationMiddleware:
             try:
                 instance = ByteBridgeInstance.objects.get(id=instance_id)
                 if instance.owner != request.user:
+                    print_error(f"Access denied to ByteBridge instance {instance_id} for user {request.user}")
                     return HttpResponseForbidden(
                         "You don't have permission to access this ByteBridge instance"
                     )
@@ -101,11 +118,13 @@ class PermissionVerificationMiddleware:
                 if datastore.owner != request.user:
                     # Private resources are completely restricted
                     if datastore.permission_type == 'private':
+                        print_error(f"Access denied to private DataStore {datastore_id} for user {request.user}")
                         return HttpResponseForbidden(
                             "You don't have permission to access this DataStore"
                         )
                     # Public resources allow read but not write
                     elif datastore.permission_type == 'public' and request.method not in read_only_methods:
+                        print_error(f"Write access denied to public DataStore {datastore_id} for user {request.user}")
                         return HttpResponseForbidden(
                             "You only have read permission for this DataStore"
                         )
@@ -121,11 +140,13 @@ class PermissionVerificationMiddleware:
                     permission_type = bucket.get_effective_permission()
                     # Private resources are completely restricted
                     if permission_type == 'private':
+                        print_error(f"Access denied to private Bucket {bucket_id} for user {request.user}")
                         return HttpResponseForbidden(
                             "You don't have permission to access this Bucket"
                         )
                     # Public resources allow read but not write
                     elif permission_type == 'public' and request.method not in read_only_methods:
+                        print_error(f"Write access denied to public Bucket {bucket_id} for user {request.user}")
                         return HttpResponseForbidden(
                             "You only have read permission for this Bucket"
                         )
@@ -143,16 +164,19 @@ class PermissionVerificationMiddleware:
                     permission_type = bucket.get_effective_permission()
                     # Private resources are completely restricted
                     if permission_type == 'private':
+                        print_error(f"Access denied to private Object {object_id} for user {request.user}")
                         return HttpResponseForbidden(
                             "You don't have permission to access this Object"
                         )
                     # Public resources allow read but not write
                     elif permission_type == 'public' and request.method not in read_only_methods:
+                        print_error(f"Write access denied to public Object {object_id} for user {request.user}")
                         return HttpResponseForbidden(
                             "You only have read permission for this Object"
                         )
                     # Community resources allow read and write but not deletion or modification
                     elif permission_type == 'community' and request.method in ['PUT', 'PATCH', 'DELETE']:
+                        print_error(f"Modification access denied to community Object {object_id} for user {request.user}")
                         return HttpResponseForbidden(
                             "You cannot modify or delete objects in a community bucket"
                         )
@@ -160,6 +184,7 @@ class PermissionVerificationMiddleware:
                 # Let the view handle the 404 response
                 pass
                 
+        print_success("Permission check passed")
         return None
 
 class JavaScriptMimeTypeMiddleware:
@@ -173,8 +198,8 @@ class JavaScriptMimeTypeMiddleware:
         
         # Check if the requested path is for a JavaScript file
         if request.path.endswith('.js'):
-            print(f"Setting Content-Type for JavaScript file: {request.path}")
+            print_status(f"Setting Content-Type for JavaScript file: {request.path}")
             response['Content-Type'] = 'application/javascript'
-            print(f"Content-Type set to {response.get('Content-Type')}")
+            print_success(f"Content-Type set to {response.get('Content-Type')}")
         
         return response
