@@ -1,14 +1,18 @@
 {
   "name": "frontend",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "NODE_OPTIONS=\"--experimental-vm-modules\" NODE_NO_WARNINGS=1 jest --verbose"
+    "test": "NODE_OPTIONS=\"--experimental-vm-modules\" NODE_NO_WARNINGS=1 jest --verbose",
+    "build:test": "vite build --mode test",
+    "preview:test": "vite preview --outDir test-sandbox",
+    "test:e2e": "playwright test --config=playwright.config.js && playwright show-report",
+    "report:e2e": "npx playwright show-report"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -18,6 +22,8 @@
     "axios": "^1.10.0",
     "fflate": "^0.8.2",
     "libsodium-wrappers": "^0.7.15",
+    "lz4-wasm": "^0.9.2",
+    "lz4-wasm-nodejs": "^0.9.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-dropzone": "^14.3.8",
@@ -28,6 +34,7 @@
     "@playwright/test": "^1.54.1",
     "@types/jest": "^30.0.0",
     "@types/libsodium-wrappers": "^0.7.14",
+    "@types/node": "^24.1.0",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
     "@vitejs/plugin-react": "^4.4.1",
@@ -38,11 +45,19 @@
     "globals": "^16.0.0",
     "jest": "^30.0.2",
     "jest-environment-jsdom": "^30.0.2",
+    "msw": "^2.11.3",
     "postcss": "^8.4.31",
     "tailwindcss": "^3.3.5",
     "ts-jest": "^29.4.0",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.30.1",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "vite-plugin-wasm": "^3.5.0",
+    "vitest": "^3.2.4"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
   }
 }
